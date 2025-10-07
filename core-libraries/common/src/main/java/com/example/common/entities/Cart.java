@@ -2,7 +2,10 @@ package com.example.common.entities;
 
 import java.util.ArrayList;
 import java.util.List;
-
+/**
+ * Entity representing a shopping cart.
+ * Holds customer ID, status, items, and product divergencies.
+ */
 public class Cart {
 
    

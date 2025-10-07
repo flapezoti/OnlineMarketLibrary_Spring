@@ -12,8 +12,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import static io.lettuce.core.MigrateArgs.Builder.key;
-
 @Repository
 public class RedisProductRepository implements IProductRepository {
 
@@ -22,6 +20,10 @@ public class RedisProductRepository implements IProductRepository {
     @Autowired
     private RedisTemplate<String, Product> productRedisTemplate;
 
+    // key() method
+    private String key(ProductId id) {
+        return PRODUCT_PREFIX + id.getSellerId() + ":" + id.getProductId();
+    }
 
     @Override
     public Optional<Product> findById(ProductId id) {
@@ -31,7 +33,6 @@ public class RedisProductRepository implements IProductRepository {
 
     @Override
     public List<Product> findByIdSellerId(int sellerId) {
-        // 假设产品 Key 格式为 "product:{sellerId}:{productId}"
         Set<String> keys = productRedisTemplate.keys(PRODUCT_PREFIX + sellerId + ":*");
         if (keys != null && !keys.isEmpty()) {
             List<Product> products = productRedisTemplate.opsForValue().multiGet(keys);
@@ -42,7 +43,7 @@ public class RedisProductRepository implements IProductRepository {
 
     @Override
     public void reset() {
-        // 遍历所有产品，将状态置为 ACTIVE、版本号置为 0
+        // Iterate over all products, set their status to ACTIVE, and reset version to 0
         Set<String> keys = productRedisTemplate.keys(PRODUCT_PREFIX + "*");
         if (keys != null && !keys.isEmpty()) {
             for (String key : keys) {
@@ -69,15 +70,14 @@ public class RedisProductRepository implements IProductRepository {
         cleanup();
     }
 
-    //?
     @Override
     public void saveProduct(Product product) {
-        // 假设 ProductId 转换为字符串后格式为 "{sellerId}:{productId}"
+        // Construct Redis key using the format: "product:{sellerId}:{productId}"
+        String redisKey = PRODUCT_PREFIX + product.getSellerId() + ":" + product.getProductId();
         productRedisTemplate.opsForValue().set(
-                PRODUCT_PREFIX + product.getProductId(),
+                redisKey,
                 product,
-                30, TimeUnit.MINUTES  // 可根据业务场景设置过期时间
-        );
+                30, TimeUnit.MINUTES);
     }
 
     @Override
@@ -86,6 +86,5 @@ public class RedisProductRepository implements IProductRepository {
             saveProduct(product);
         }
     }
-
 
 }

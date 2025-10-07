@@ -7,6 +7,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Event representing a stock reservation request.
+ * Contains timestamp, customer checkout details, reserved items, and instance
+ * information.
+ */
 public class ReserveStock {
 
     private LocalDateTime timestamp;
@@ -14,11 +19,19 @@ public class ReserveStock {
     private List<CartItem> items;
     private String instanceId;
 
+    public ReserveStock() {
+    }
 
-    public ReserveStock() {}
-
-
-    public ReserveStock(LocalDateTime timestamp, CustomerCheckout customerCheckout, List<CartItem> items, String instanceId) {
+    /**
+     * Constructor with all parameters.
+     *
+     * @param timestamp        event timestamp
+     * @param customerCheckout customer checkout details
+     * @param items            list of reserved items
+     * @param instanceId       instance ID
+     */
+    public ReserveStock(LocalDateTime timestamp, CustomerCheckout customerCheckout, List<CartItem> items,
+            String instanceId) {
         this.timestamp = timestamp;
         this.customerCheckout = customerCheckout;
         this.items = items;
@@ -58,7 +71,7 @@ public class ReserveStock {
         this.instanceId = instanceId;
     }
 
-    // Override toString() 
+    // Override toString()
     @Override
     public String toString() {
         return items.stream()

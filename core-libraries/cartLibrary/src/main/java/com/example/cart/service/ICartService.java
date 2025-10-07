@@ -7,7 +7,10 @@ import com.example.common.events.PriceUpdate;
 import com.example.common.events.ProductUpdated;
 import com.example.common.requests.CustomerCheckout;
 
-
+/**
+ * The interface for cartservice, there is a implementation named "CartServiceCore" in the library, 
+ * this interface provide in case of some functions user may want to adjust
+ */
 public interface ICartService {
 
 

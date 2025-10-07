@@ -4,6 +4,11 @@ import com.example.common.entities.ShipmentStatus;
 
 import java.time.LocalDateTime;
 
+/**
+ * Event representing a shipment notification.
+ * Contains customer, order, event date, instance information, and shipment
+ * status.
+ */
 public class ShipmentNotification {
     private int customerId;
     private int orderId;
@@ -11,9 +16,20 @@ public class ShipmentNotification {
     private String instanceId;
     private ShipmentStatus status;
 
-    public ShipmentNotification() {}
+    public ShipmentNotification() {
+    }
 
-    public ShipmentNotification(int customerId, int orderId, LocalDateTime eventDate, String instanceId, ShipmentStatus status) {
+    /**
+     * Constructor with all parameters.
+     *
+     * @param customerId customer ID
+     * @param orderId    order ID
+     * @param eventDate  shipment event date
+     * @param instanceId instance ID
+     * @param status     shipment status
+     */
+    public ShipmentNotification(int customerId, int orderId, LocalDateTime eventDate, String instanceId,
+            ShipmentStatus status) {
         this.customerId = customerId;
         this.orderId = orderId;
         this.eventDate = eventDate;

@@ -6,7 +6,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.example.common.entities.CartStatus;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 
+/**
+ * Entity representing a shopping cart in the persistence layer.
+ * Contains customer, status, timestamps, and a list of cart items.
+ */
 @Entity
 @Table(name = "cart", schema = "cartdb")
 public class Cart {
@@ -22,6 +27,7 @@ public class Cart {
     private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonManagedReference
     private List<CartItem> items = new ArrayList<>();;
 
     public Cart() {

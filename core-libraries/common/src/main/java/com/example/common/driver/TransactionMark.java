@@ -1,5 +1,8 @@
 package com.example.common.driver;
-
+/**
+ * Represents a transaction mark which contains information about
+ * transaction ID, type, actor, status, and source.
+ */
 public class TransactionMark {
 
     private String tid;  // transaction ID

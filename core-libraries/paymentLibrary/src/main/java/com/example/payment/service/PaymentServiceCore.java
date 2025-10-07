@@ -28,6 +28,50 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Core implementation of the {@link IPaymentService} interface.
+ *
+ * <p>
+ * This class encapsulates the main business logic for processing payments
+ * within the
+ * event-driven Pub/Sub architecture. It reacts to {@link InvoiceIssued} events,
+ * performs payment authorization (optionally through an external provider),
+ * persists payment details, and publishes follow-up events indicating the
+ * result.
+ * </p>
+ *
+ * <h3>Responsibilities</h3>
+ * <ul>
+ * <li>Validate and parse payment details (e.g., card expiration date).</li>
+ * <li>Interact with an {@link IExternalProvider} for simulated or real payment
+ * execution.</li>
+ * <li>Persist payment records via {@link IPaymentRepository} and
+ * {@link IOrderPaymentCardRepository}.</li>
+ * <li>Emit events through {@link IEventPublisher} such as
+ * {@link PaymentConfirmed} or {@link PaymentFailed}.</li>
+ * <li>Generate {@link TransactionMark} messages to mark transaction
+ * outcomes.</li>
+ * </ul>
+ *
+ * <h3>Configuration</h3>
+ * <p>
+ * The behavior of this class is influenced by {@link IPaymentConfig}:
+ * if {@code isPaymentProvider()} returns {@code true}, the service will call
+ * the external provider;
+ * otherwise, payments are assumed successful.
+ * Similarly, {@code isStreaming()} determines whether payment result events are
+ * emitted.
+ * </p>
+ *
+ * <h3>Integration Notes</h3>
+ * <p>
+ * This class is platform-independent and can be used across different runtime
+ * environments.
+ * For example, the module {@code KafkaSpringbootImplementation/paymentService}
+ * provides a concrete Spring Boot–based implementation of all required
+ * interfaces.
+ * </p>
+ */
 public class PaymentServiceCore implements IPaymentService {
 
     private final IPaymentRepository paymentRepository;
@@ -37,11 +81,23 @@ public class PaymentServiceCore implements IPaymentService {
     private final IExternalProvider externalProvider;
     private final Logger logger = LoggerFactory.getLogger(PaymentServiceCore.class);
 
+    /**
+     * Constructs a new PaymentServiceCore with injected dependencies.
+     *
+     * @param paymentRepository          repository for persisting payment records.
+     * @param orderPaymentCardRepository repository for card-specific payment data.
+     * @param eventPublisher             publisher used to emit domain events to the
+     *                                   message bus.
+     * @param config                     runtime configuration controlling provider
+     *                                   and streaming behavior.
+     * @param externalProvider           abstraction over an external or simulated
+     *                                   payment service.
+     */
     public PaymentServiceCore(IPaymentRepository paymentRepository,
-                               IOrderPaymentCardRepository orderPaymentCardRepository,
-                               IEventPublisher eventPublisher,
-                               IPaymentConfig config,
-                               IExternalProvider externalProvider) {
+            IOrderPaymentCardRepository orderPaymentCardRepository,
+            IEventPublisher eventPublisher,
+            IPaymentConfig config,
+            IExternalProvider externalProvider) {
         this.paymentRepository = paymentRepository;
         this.orderPaymentCardRepository = orderPaymentCardRepository;
         this.eventPublisher = eventPublisher;
@@ -49,6 +105,30 @@ public class PaymentServiceCore implements IPaymentService {
         this.externalProvider = externalProvider;
     }
 
+    /**
+     * Handles the main payment processing workflow triggered by an
+     * {@link InvoiceIssued} event.
+     *
+     * <p>
+     * Steps include:
+     * </p>
+     * <ol>
+     * <li>Parse and validate customer payment information.</li>
+     * <li>Invoke {@link IExternalProvider#create(PaymentIntentCreateOptions)} if
+     * configured.</li>
+     * <li>Persist successful or failed payment lines in repositories.</li>
+     * <li>Publish corresponding follow-up events and transaction marks.</li>
+     * </ol>
+     *
+     * <p>
+     * In case of errors, the method logs the failure and rethrows the exception,
+     * allowing higher layers (e.g., message consumers) to handle retries or poison
+     * events.
+     * </p>
+     *
+     * @param invoiceIssued the invoice data containing order, customer, and payment
+     *                      details.
+     */
     @Override
     public void processPayment(InvoiceIssued invoiceIssued) {
         try {
@@ -71,15 +151,15 @@ public class PaymentServiceCore implements IPaymentService {
                         invoiceIssued.getCustomer().getCardNumber(),
                         invoiceIssued.getCustomer().getCardSecurityNumber(),
                         cardExpParsed.getMonthValue(),
-                        cardExpParsed.getYear()
-                );
+                        cardExpParsed.getYear());
 
                 PaymentIntent intent = externalProvider.create(options);
                 if (intent == null) {
                     logger.error("Failed to obtain payment intent from external provider.");
                     throw new RuntimeException("Cannot get payment intent from external provider");
                 }
-                status = "succeeded".equals(intent.getStatus()) ? PaymentStatus.SUCCEEDED : PaymentStatus.REQUIRES_PAYMENT_METHOD;
+                status = "succeeded".equals(intent.getStatus()) ? PaymentStatus.SUCCEEDED
+                        : PaymentStatus.REQUIRES_PAYMENT_METHOD;
                 logger.info("External payment provider returned status: {}", intent.getStatus());
             } else {
                 status = PaymentStatus.SUCCEEDED;
@@ -105,7 +185,7 @@ public class PaymentServiceCore implements IPaymentService {
                         status,
                         now);
                 paymentRepository.save(cardPaymentLine);
-                OrderPayment entity = cardPaymentLine; 
+                OrderPayment entity = cardPaymentLine;
 
                 OrderPaymentCardId orderPaymentCardId = new OrderPaymentCardId(
                         invoiceIssued.getCustomer().getCustomerId(),
@@ -163,7 +243,6 @@ public class PaymentServiceCore implements IPaymentService {
             if (!paymentLines.isEmpty()) {
                 paymentRepository.saveAll(paymentLines);
             }
-    
 
             if (config.isStreaming()) {
                 if (status == PaymentStatus.SUCCEEDED) {

@@ -6,7 +6,7 @@ import com.example.common.events.ReserveStock;
 import com.example.common.messaging.IEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,18 +31,16 @@ public class CartKafkaProducer implements IEventPublisher {
     private static final String TRANSACTION_MARK_PRICE_UPDATE = "TransactionMark_PRICE_UPDATE";
     private static final String TRANSACTION_MARK_UPDATE_PRODUCT = "TransactionMark_UPDATE_PRODUCT";
 
-
     @Override
-    public void publishEvent(String topic, Object event) {
+    public void publishEvent(String topic, Object ...event) {
         sendAsJson(topic, event);
     }
 
-  
     public void sendProductRequest(ProductUpdated productRequest) {
         sendAsJson(PRODUCT_REQUEST_TOPIC, productRequest);
     }
 
-    public void sendReserveStock(ReserveStock reserveStock){
+    public void sendReserveStock(ReserveStock reserveStock) {
         sendAsJson(RESERVE_STOCK_TOPIC, reserveStock);
         logger.info("Sent to reserve-stock-topic");
     }
@@ -63,13 +61,21 @@ public class CartKafkaProducer implements IEventPublisher {
         sendAsJson(TRANSACTION_MARK_PRICE_UPDATE, transactionMark);
     }
 
-
     private void sendAsJson(String topic, Object payload) {
         try {
-            String json = objectMapper.writeValueAsString(payload);
-            kafkaTemplate.send(new ProducerRecord<>(topic, json));
+            String json = (payload == null) ? "{}" : objectMapper.writeValueAsString(payload);
+
+            kafkaTemplate.send(topic, json).whenComplete((result, ex) -> {
+                if (ex != null) {
+                    logger.error("Failed to send message to topic {}: {}", topic, ex.getMessage(), ex);
+                } else {
+                    RecordMetadata metadata = result.getRecordMetadata();
+                    logger.debug("Message sent to topic {} partition {} offset {}", 
+                                 topic, metadata.partition(), metadata.offset());
+                }
+            });
         } catch (Exception e) {
-            logger.error("Failed to serialize and send message to topic {}: {}", topic, e.getMessage());
+            logger.error("Failed to serialize message for topic {}: {}", topic, e.getMessage(), e);
         }
     }
 }

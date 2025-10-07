@@ -16,6 +16,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Core implementation of {@link IMaterializedViewService}.
+ *
+ * <p>
+ * This class manages the lifecycle of materialized views in the Seller domain.
+ * It aggregates order statistics (orders, items, revenue, freight, etc.) for
+ * each seller
+ * and maintains them in an in-memory cache layer represented by
+ * {@link IMaterializedViewServiceCache}.
+ *
+ * <p>
+ * Unlike framework-specific implementations, this core version is
+ * platform-agnostic:
+ * it does not depend on Spring, Kafka, or any external message system. It
+ * focuses purely
+ * on domain logic and data aggregation.
+ * </p>
+ */
 public class MaterializedViewServiceCore implements IMaterializedViewService {
 
     private static final Logger logger = LoggerFactory.getLogger(MaterializedViewServiceCore.class);
@@ -23,17 +41,23 @@ public class MaterializedViewServiceCore implements IMaterializedViewService {
     private final IMaterializedViewServiceCache orderSellerViewCache;
 
     public MaterializedViewServiceCore(IOrderEntryRepository orderEntryRepository,
-                                       IMaterializedViewServiceCache orderSellerViewCache) {
+            IMaterializedViewServiceCache orderSellerViewCache) {
         this.orderEntryRepository = orderEntryRepository;
         this.orderSellerViewCache = orderSellerViewCache;
     }
 
+    /**
+     * Initializes the seller-level materialized views.
+     * <p>
+     * This method clears existing cache entries and rebuilds them
+     * from the aggregated order repository query results.
+     * It preloads active order data (INVOICED, PAYMENT_PROCESSED, etc.)
+     * to accelerate dashboard and analytics queries.
+     * </p>
+     */
     @Override
     public void initializeMaterializedView() {
-        // 先清除已有缓存
         orderSellerViewCache.clear();
-
-        // 定义需要聚合的订单状态
         List<OrderStatus> statuses = Arrays.asList(
                 OrderStatus.INVOICED,
                 OrderStatus.PAYMENT_PROCESSED,
@@ -68,6 +92,14 @@ public class MaterializedViewServiceCore implements IMaterializedViewService {
         return orderSellerViewCache.getSellerView(sellerId);
     }
 
+    /**
+     * Handles {@link InvoiceIssued} events by incrementally updating seller
+     * aggregates in cache.
+     * <p>
+     * Each event is grouped by seller ID to efficiently update order counts,
+     * item quantities, total sales, freight, and invoice values.
+     * </p>
+     */
     @Override
     public void processInvoiceIssued(InvoiceIssued invoiceIssued) {
         logger.info("Processing InvoiceIssued event: {}", invoiceIssued);
@@ -87,7 +119,7 @@ public class MaterializedViewServiceCore implements IMaterializedViewService {
                     view.setCountItems(view.getCountItems() + calculateTotalItems(itemsForSeller));
                     view.setTotalAmount(view.getTotalAmount() + calculateTotalAmount(itemsForSeller));
                     view.setTotalFreight(view.getTotalFreight() + calculateTotalFreight(itemsForSeller));
-                    // 假设 InvoiceIssued 中有总发票金额字段
+
                     view.setTotalInvoice(view.getTotalInvoice() + invoiceIssued.getTotalInvoice());
                     orderSellerViewCache.updateSellerView(sellerId, view);
                     logger.info("Updated cache for sellerId {}: {}", sellerId, view);
@@ -98,7 +130,7 @@ public class MaterializedViewServiceCore implements IMaterializedViewService {
     public void processShipmentNotification(ShipmentNotification notification) {
         logger.info("Processing ShipmentNotification event: {}", notification);
         List<Integer> sellerIds = orderEntryRepository.findByCustomerIdAndOrderId(
-                        notification.getCustomerId(), notification.getOrderId()).stream()
+                notification.getCustomerId(), notification.getOrderId()).stream()
                 .map(orderEntry -> orderEntry.getId().getSellerId())
                 .distinct()
                 .toList();
@@ -126,8 +158,10 @@ public class MaterializedViewServiceCore implements IMaterializedViewService {
         }
     }
 
+    // --------------------------
+    // Helper calculation methods
+    // --------------------------
 
-    // 辅助计算方法
     private int calculateTotalItems(List<OrderItem> items) {
         return items.stream().mapToInt(OrderItem::getQuantity).sum();
     }

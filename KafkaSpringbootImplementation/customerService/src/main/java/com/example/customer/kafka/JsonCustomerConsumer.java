@@ -6,16 +6,18 @@ import com.example.common.events.PaymentFailed;
 import com.example.customer.eventMessaging.AbstractCustomerConsumer;
 import com.example.customer.service.ICustomerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 public class JsonCustomerConsumer extends AbstractCustomerConsumer {
-
+    @Autowired
     private final ObjectMapper objectMapper;
 
-    public JsonCustomerConsumer(ICustomerService customerService) {
+    public JsonCustomerConsumer(ICustomerService customerService,ObjectMapper objectMapper) {
         super(customerService);
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper;
     }
 
     @Override

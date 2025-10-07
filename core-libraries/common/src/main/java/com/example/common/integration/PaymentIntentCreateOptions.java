@@ -1,5 +1,10 @@
 package com.example.common.integration;
 
+/**
+ * Represents the options required to create a payment intent.
+ * Contains customer, amount, payment method, idempotency key, card details,
+ * setup usage preferences, and currency.
+ */
 public class PaymentIntentCreateOptions {
 
     private String customer = "";
@@ -10,19 +15,32 @@ public class PaymentIntentCreateOptions {
     private String setupFutureUsage = "off_session";
     private Currency currency = Currency.USD;
 
-   
-     public PaymentIntentCreateOptions() {}
+    // default constructor
+    public PaymentIntentCreateOptions() {
+    }
 
-     public PaymentIntentCreateOptions(float amount, String customer, String idempotencyKey, String cardNumber, String cvc, int expMonth, int expYear) {
-         this.amount = amount;
-         this.customer = customer;
-         this.idempotencyKey = idempotencyKey;
-         this.cardOptions = new CardOptions();
-         this.cardOptions.setNumber(cardNumber);
-         this.cardOptions.setCvc(cvc);
-         this.cardOptions.setExpMonth(String.valueOf(expMonth));
-         this.cardOptions.setExpYear(String.valueOf(expYear));
-     }
+    /**
+     * Constructor with required fields for creating a payment intent.
+     *
+     * @param amount         payment amount
+     * @param customer       customer ID
+     * @param idempotencyKey unique idempotency key for request safety
+     * @param cardNumber     card number
+     * @param cvc            card CVC code
+     * @param expMonth       card expiration month
+     * @param expYear        card expiration year
+     */
+    public PaymentIntentCreateOptions(float amount, String customer, String idempotencyKey, String cardNumber,
+            String cvc, int expMonth, int expYear) {
+        this.amount = amount;
+        this.customer = customer;
+        this.idempotencyKey = idempotencyKey;
+        this.cardOptions = new CardOptions();
+        this.cardOptions.setNumber(cardNumber);
+        this.cardOptions.setCvc(cvc);
+        this.cardOptions.setExpMonth(String.valueOf(expMonth));
+        this.cardOptions.setExpYear(String.valueOf(expYear));
+    }
 
     // Getters and Setters
     public String getCustomer() {

@@ -1,7 +1,12 @@
 package com.example.cart.model;
 
-import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 
+import jakarta.persistence.*;
+/**
+ * Entity representing an item within a shopping cart.
+ * Contains product details, pricing, quantity, and references to its parent cart.
+ */
 @Entity
 @Table(name = "cart_item", schema = "cartdb")
 public class CartItem {
@@ -19,6 +24,7 @@ public class CartItem {
     @ManyToOne
     @MapsId("customerId") 
     @JoinColumn(name = "customer_id") 
+    @JsonBackReference
     private Cart cart;
 
    

@@ -4,6 +4,10 @@ import java.util.List;
 import com.example.common.requests.CustomerCheckout;
 import com.example.common.entities.OrderItem;
 
+/**
+ * Event representing a failed payment.
+ * Contains status, customer, order, items, amount, and instance information.
+ */
 public class PaymentFailed {
 
     private String status;
@@ -14,10 +18,21 @@ public class PaymentFailed {
     private String instanceId;
 
     // Default constructor
-    public PaymentFailed() {}
+    public PaymentFailed() {
+    }
 
-    // Constructor with parameters
-    public PaymentFailed(String status, CustomerCheckout customer, int orderId, List<OrderItem> items, float totalAmount, String instanceId) {
+    /**
+     * Constructor with all parameters.
+     *
+     * @param status      failure status message
+     * @param customer    customer checkout details
+     * @param orderId     order ID
+     * @param items       list of order items
+     * @param totalAmount total attempted payment amount
+     * @param instanceId  instance ID
+     */
+    public PaymentFailed(String status, CustomerCheckout customer, int orderId, List<OrderItem> items,
+            float totalAmount, String instanceId) {
         this.status = status;
         this.customer = customer;
         this.orderId = orderId;

@@ -1,6 +1,9 @@
 package com.example.common.dto;
 
-
+/**
+ * Data Transfer Object representing a product replica.
+ * Contains seller, product, name, price, and version information.
+ */
 public class ProductReplicaDTO {
 
     private int sellerId;
@@ -9,10 +12,18 @@ public class ProductReplicaDTO {
     private float price;
     private String version;
 
-    
     public ProductReplicaDTO() {
     }
 
+    /**
+     * Constructor with all parameters.
+     *
+     * @param sellerId  seller ID
+     * @param productId product ID
+     * @param name      product name
+     * @param price     product price
+     * @param version   product version
+     */
     public ProductReplicaDTO(int sellerId, int productId, String name, float price, String version) {
         this.sellerId = sellerId;
         this.productId = productId;
@@ -21,7 +32,7 @@ public class ProductReplicaDTO {
         this.version = version;
     }
 
-    // Getter and Setter 
+    // Getter and Setter
     public int getSellerId() {
         return sellerId;
     }
@@ -61,8 +72,5 @@ public class ProductReplicaDTO {
     public void setVersion(String version) {
         this.version = version;
     }
-
-
-
 
 }

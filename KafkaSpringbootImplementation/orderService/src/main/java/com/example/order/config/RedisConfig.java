@@ -22,8 +22,8 @@ public class RedisConfig {
 
     private ObjectMapper objectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule()); // 处理 Java 8 时间类型
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // 日期序列化为字符串
+        objectMapper.registerModule(new JavaTimeModule()); 
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Serialize date to string
         objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
         return objectMapper;
     }

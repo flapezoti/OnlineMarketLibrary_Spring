@@ -1,10 +1,17 @@
 package com.example.cart.model;
+
 import java.util.Objects;
 
 import lombok.Data;
 import java.io.Serializable;
 import jakarta.persistence.Embeddable;
 
+/**
+ * Composite primary key for ProductReplica entity.
+ * 
+ * Combines sellerId and productId to uniquely identify
+ * a product replica within the cart service.
+ */
 @Data
 @Embeddable
 public class ProductReplicaId implements Serializable {
@@ -12,9 +19,8 @@ public class ProductReplicaId implements Serializable {
     private int sellerId;
     private int productId;
 
-
-    public ProductReplicaId() {}
-
+    public ProductReplicaId() {
+    }
 
     public ProductReplicaId(int sellerId, int productId) {
         this.sellerId = sellerId;
@@ -39,11 +45,13 @@ public class ProductReplicaId implements Serializable {
         this.productId = productId;
     }
 
-    // override equals and hashCode 
+    // override equals and hashCode
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
         ProductReplicaId that = (ProductReplicaId) o;
         return sellerId == that.sellerId && productId == that.productId;
     }

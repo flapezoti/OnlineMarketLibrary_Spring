@@ -5,6 +5,10 @@ import java.util.List;
 import com.example.common.requests.CustomerCheckout;
 import com.example.common.entities.OrderItem;
 
+/**
+ * Event representing a confirmed payment.
+ * Contains customer, order, amount, items, date, and instance information.
+ */
 public final class PaymentConfirmed {
 
     private CustomerCheckout customer;
@@ -14,10 +18,21 @@ public final class PaymentConfirmed {
     private LocalDateTime date;
     private String instanceId;
 
-    public PaymentConfirmed(){}
+    public PaymentConfirmed() {
+    }
 
-    // Constructor with parameters
-    public PaymentConfirmed(CustomerCheckout customer, int orderId, float totalAmount, List<OrderItem> items, LocalDateTime date, String instanceId) {
+    /**
+     * Constructor with all parameters.
+     *
+     * @param customer    customer checkout details
+     * @param orderId     order ID
+     * @param totalAmount total payment amount
+     * @param items       list of order items
+     * @param date        payment confirmation date
+     * @param instanceId  instance ID
+     */
+    public PaymentConfirmed(CustomerCheckout customer, int orderId, float totalAmount, List<OrderItem> items,
+            LocalDateTime date, String instanceId) {
         this.customer = customer;
         this.orderId = orderId;
         this.totalAmount = totalAmount;

@@ -19,21 +19,23 @@ public class RedisStockRepository implements IStockRepository {
     private RedisTemplate<String, StockItem> redisTemplate;
 
     /**
-     * 根据 sellerId 和 productId 生成 Redis Key，格式：stock:{sellerId}:{productId}
+     * Generate a Redis key based on sellerId and productId.
+     * Format: stock:{sellerId}:{productId}
      */
     private String generateKey(int sellerId, int productId) {
         return STOCK_KEY_PREFIX + sellerId + ":" + productId;
     }
 
     /**
-     * 根据 StockItem 对象生成 Redis Key
+     * Generate a Redis Key based on StockItem
      */
     private String generateKey(StockItem item) {
         return generateKey(item.getSellerId(), item.getProductId());
     }
 
     /**
-     * 根据多个 StockItemId 生成 Key 模式（多个 id 逗号分隔组装）
+     * Generate Redis key patterns for multiple StockItemIds.
+     * Multiple IDs are concatenated with commas.
      */
     private List<String> generateKeys(List<StockItemId> ids) {
         return ids.stream()
@@ -43,7 +45,8 @@ public class RedisStockRepository implements IStockRepository {
 
     @Override
     public StockItem findForUpdate(int sellerId, int productId) {
-        // Redis 不支持悲观锁，这里仅返回对应库存项
+        // Redis does not support pessimistic locking; simply return the corresponding
+        // stock item.
         String key = generateKey(sellerId, productId);
         return redisTemplate.opsForValue().get(key);
     }
@@ -57,7 +60,7 @@ public class RedisStockRepository implements IStockRepository {
 
     @Override
     public Optional<StockItem> findById(StockItemId stockItemId) {
-        // 直接委托给接受两个参数的版本
+        // Delegate directly to the overloaded version that accepts two parameters.
         return findById(stockItemId.getSellerId(), stockItemId.getProductId());
     }
 
@@ -68,12 +71,9 @@ public class RedisStockRepository implements IStockRepository {
         return Optional.ofNullable(item);
     }
 
-
-
-
     @Override
     public List<StockItem> findBySellerId(int sellerId) {
-        // 模糊匹配以 "stock:{sellerId}:" 开头的 key
+        // Fuzzy match keys starting with "stock:{sellerId}:"
         String pattern = STOCK_KEY_PREFIX + sellerId + ":*";
         Set<String> keys = redisTemplate.keys(pattern);
         if (keys == null || keys.isEmpty()) {
@@ -85,20 +85,21 @@ public class RedisStockRepository implements IStockRepository {
 
     @Override
     public void reset(int qty) {
-        // 获取所有库存项 key
+        // Retrieve all stock item keys
         Set<String> keys = redisTemplate.keys(STOCK_KEY_PREFIX + "*");
         if (keys != null && !keys.isEmpty()) {
-            // 对每个库存项更新：active = true, version = "0", qtyReserved = 0, qtyAvailable = qty
-            // 因为 Redis 不支持批量 UPDATE，你需要遍历每个库存项并更新后保存
+            // For each stock item, update: active = true, version = "0", qtyReserved = 0,
+            // qtyAvailable = qty
+            // Since Redis does not support batch UPDATE, iterate through all stock items
+            // and update them individually before saving
             List<StockItem> items = redisTemplate.opsForValue().multiGet(keys);
             if (items != null) {
                 for (StockItem item : items) {
-                    // 假设 StockItem 有如下 setter 方法
+                    // Assume that StockItem provides the following setter methods
                     item.setActive(true);
                     item.setVersion("0");
                     item.setQtyReserved(0);
                     item.setQtyAvailable(qty);
-                    // 保存更新后的库存项
                     save(item);
                 }
             }
@@ -108,13 +109,14 @@ public class RedisStockRepository implements IStockRepository {
     @Override
     public void save(StockItem stockItem) {
         String key = generateKey(stockItem);
-        // 保存库存项到 Redis，设置过期时间1小时（可以按需要调整）
+        // Save stock item to Redis，set the expiration time to 1 hour.
         redisTemplate.opsForValue().set(key, stockItem, 1, TimeUnit.HOURS);
     }
 
     @Override
     public void saveAll(List<StockItem> stockItemsReserved) {
-        if (stockItemsReserved == null || stockItemsReserved.isEmpty()) return;
+        if (stockItemsReserved == null || stockItemsReserved.isEmpty())
+            return;
         Map<String, StockItem> map = new HashMap<>();
         for (StockItem item : stockItemsReserved) {
             map.put(generateKey(item), item);
@@ -124,8 +126,6 @@ public class RedisStockRepository implements IStockRepository {
 
     @Override
     public void flush() {
-        // RedisTemplate 中通常没有 flush 方法，如果需要确保写入，可以调用 redisTemplate.execute() 调用原生命令。
-        // 此处留空或者根据实际情况调用 redisTemplate.getConnectionFactory().getConnection().flushDb();
     }
 
     @Override
@@ -136,4 +136,3 @@ public class RedisStockRepository implements IStockRepository {
         }
     }
 }
-

@@ -6,8 +6,16 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+/**
+ * Entity representing a product replica within the cart service.
+ * 
+ * This table stores replicated product information (id, name, price, version,
+ * status)
+ * for consistency and faster access during checkout.
+ * The primary key is a composite of sellerId and productId.
+ */
 @Entity
-@Table(name = "replica_product", schema = "cartdb") 
+@Table(name = "replica_product", schema = "cartdb")
 @Getter
 @Setter
 public class ProductReplica {
@@ -22,8 +30,7 @@ public class ProductReplica {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-
-    public ProductReplica(ProductReplicaId productReplicaId){
+    public ProductReplica(ProductReplicaId productReplicaId) {
         this.productReplicaId = productReplicaId;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = this.createdAt;
@@ -34,14 +41,13 @@ public class ProductReplica {
         this.updatedAt = this.createdAt;
     }
 
-    public ProductReplicaId getProductReplicaId(){
+    public ProductReplicaId getProductReplicaId() {
         return this.productReplicaId;
     }
 
-    public void setProductReplicaId(ProductReplicaId id){
+    public void setProductReplicaId(ProductReplicaId id) {
         this.productReplicaId = id;
     }
-
 
     public int getSellerId() {
         return this.productReplicaId.getSellerId();

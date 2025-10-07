@@ -1,5 +1,9 @@
 package com.example.common.events;
 
+/**
+ * Event representing a price update for a product.
+ * Contains seller, product, new price, version, and instance information.
+ */
 public class PriceUpdate {
 
     private int sellerId;
@@ -9,13 +13,23 @@ public class PriceUpdate {
     private String instanceId;
 
     // Default constructor
-    public PriceUpdate() {}
+    public PriceUpdate() {
+    }
 
+    /**
+     * Constructor with all parameters.
+     *
+     * @param sellerId   seller ID
+     * @param productId  product ID
+     * @param price      updated product price
+     * @param version    product version (default "0" if null)
+     * @param instanceId instance ID
+     */
     public PriceUpdate(int sellerId, int productId, float price, String version, String instanceId) {
         this.sellerId = sellerId;
         this.productId = productId;
         this.price = price;
-        this.version = (version != null) ? version : "0"; 
+        this.version = (version != null) ? version : "0";
         this.instanceId = instanceId;
     }
 

@@ -10,8 +10,49 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 抽象消费者类，只定义处理各种事件的通用方法。
- * 不包含任何 Kafka 相关注解，也不依赖 Spring。
+ * Abstract base class for consuming seller-related events.
+ *
+ * <p>
+ * This class defines a platform-agnostic structure for handling seller domain
+ * events such as
+ * {@link InvoiceIssued}, {@link PaymentConfirmed}, {@link PaymentFailed},
+ * {@link ShipmentNotification}, and {@link DeliveryNotification}.
+ * It provides standardized event-processing pipelines without any dependency on
+ * frameworks like Spring or Kafka.
+ * </p>
+ *
+ * <h3>Usage</h3>
+ * <p>
+ * To use this class, extend it and implement the deserialization methods
+ * (e.g. {@code deserializeInvoiceIssued(String payload)}) to convert raw
+ * payloads into domain objects.
+ * These methods are framework-agnostic and can be implemented using your
+ * preferred serialization library
+ * (such as Jackson for JSON).
+ * </p>
+ *
+ * <pre>
+ * {@code
+ * public class JsonSellerConsumer extends AbstractSellerConsumer {
+ *     private final ObjectMapper mapper = new ObjectMapper();
+ *
+ *     public JsonSellerConsumer(ISellerService sellerService) {
+ *         super(sellerService);
+ *     } @Override
+ *     protected InvoiceIssued deserializeInvoiceIssued(String payload) {
+ *         return mapper.readValue(payload, InvoiceIssued.class);
+ *     }
+ *
+ *     // Implement other deserialization methods...
+ * }
+ * }
+ * </pre>
+ *
+ * <p>
+ * After extending this class, you can connect the {@code handleXXX} methods
+ * (e.g. {@link #handleInvoiceIssued(String)}) to your message queue consumer
+ * logic.
+ * </p>
  */
 public abstract class AbstractSellerConsumer {
 
@@ -82,6 +123,4 @@ public abstract class AbstractSellerConsumer {
         }
     }
 
-
 }
-

@@ -17,19 +17,18 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 public class RedisConfig {
 
     private ObjectMapper objectMapper() {
+        // set the date type
         ObjectMapper mapper = new ObjectMapper();
-        // 注册 JavaTimeModule 支持 Java 8 日期时间类型
         mapper.registerModule(new JavaTimeModule());
-        // 禁用将日期写成时间戳
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        // 设置所有字段的可见性
+        // set all the field is unvisible
         mapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
         return mapper;
     }
 
     /**
-     * RedisTemplate for StockItem 对象
-     * Key 为 String 类型，Value 为 StockItem 类型
+     * RedisTemplate for StockItem object
+     * Key is String type，Value is StockItem type
      */
     @Bean
     public RedisTemplate<String, StockItem> stockRedisTemplate(RedisConnectionFactory connectionFactory) {

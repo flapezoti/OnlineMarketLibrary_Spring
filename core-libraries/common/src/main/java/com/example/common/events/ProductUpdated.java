@@ -2,6 +2,11 @@ package com.example.common.events;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+/**
+ * Event representing a product update.
+ * Contains seller, product, descriptive details, pricing, freight, status, and
+ * version.
+ */
 public class ProductUpdated {
 
     @JsonProperty("seller_id")
@@ -17,15 +22,29 @@ public class ProductUpdated {
     private float price;
     private float freightValue;
     private String status;
-    
+
     @JsonProperty("version")
     private String version;
 
+    public ProductUpdated() {
+    }
 
-    public ProductUpdated() {}
-
-
-    public ProductUpdated(int sellerId, int productId, String name, String sku, String category, String description, float price, float freightValue, String status, String version) {
+    /**
+     * Constructor with all parameters.
+     *
+     * @param sellerId     seller ID
+     * @param productId    product ID
+     * @param name         product name
+     * @param sku          product SKU
+     * @param category     product category
+     * @param description  product description
+     * @param price        product price
+     * @param freightValue freight cost value
+     * @param status       product status
+     * @param version      product version
+     */
+    public ProductUpdated(int sellerId, int productId, String name, String sku, String category, String description,
+            float price, float freightValue, String status, String version) {
         this.sellerId = sellerId;
         this.productId = productId;
         this.name = name;
@@ -118,7 +137,6 @@ public class ProductUpdated {
     public void setVersion(String version) {
         this.version = version;
     }
-
 
     @Override
     public String toString() {

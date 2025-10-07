@@ -19,6 +19,45 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Core implementation of the {@link IOrderService} interface.
+ *
+ * <p>
+ * This class encapsulates the core business logic for order creation, payment
+ * handling,
+ * shipment tracking, and event publishing. It coordinates multiple repository
+ * interfaces
+ * and the event publisher to ensure transactional consistency across the order
+ * lifecycle.
+ * </p>
+ *
+ * <p>
+ * <b>Integration Notes:</b>
+ * </p>
+ * <ul>
+ * <li>This class should be used as the core service layer within a
+ * platform-specific implementation
+ * (e.g., Kafka + Spring Boot, Dapr, or Orleans).</li>
+ * <li>To use it, users must provide concrete implementations for the following
+ * interfaces:
+ * <ul>
+ * <li>{@link IOrderRepository}</li>
+ * <li>{@link IOrderItemRepository}</li>
+ * <li>{@link IOrderHistoryRepository}</li>
+ * <li>{@link ICustomerOrderRepository}</li>
+ * <li>{@link IEventPublisher}</li>
+ * </ul>
+ * </li>
+ * <li>See the <code>KafkaSpringbootImplementation/orderService</code> module
+ * for an example of how to integrate this class
+ * with message queues and persistence layers.</li>
+ * </ul>
+ *
+ * <p>
+ * This class is platform-agnostic and designed to be reusable across different
+ * messaging or persistence backends.
+ * </p>
+ */
 public class OrderServiceCore implements IOrderService {
 
     private final IOrderRepository orderRepository;
@@ -28,10 +67,10 @@ public class OrderServiceCore implements IOrderService {
     private final IEventPublisher eventPublisher;
 
     public OrderServiceCore(IOrderRepository orderRepository,
-                            IOrderItemRepository orderItemRepository,
-                            IOrderHistoryRepository orderHistoryRepository,
-                            ICustomerOrderRepository customerOrderRepository,
-                            IEventPublisher eventPublisher) {
+            IOrderItemRepository orderItemRepository,
+            IOrderHistoryRepository orderHistoryRepository,
+            ICustomerOrderRepository customerOrderRepository,
+            IEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.orderHistoryRepository = orderHistoryRepository;
@@ -257,7 +296,8 @@ public class OrderServiceCore implements IOrderService {
 
     @Override
     public void cleanup() {
-        orderItemRepository.deleteAll();;
+        orderItemRepository.deleteAll();
+        ;
         orderHistoryRepository.deleteAll();
         orderRepository.deleteAll();
         customerOrderRepository.deleteAll();

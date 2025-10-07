@@ -4,6 +4,11 @@ import java.io.Serializable;
 import java.util.Objects;
 
 import jakarta.persistence.Embeddable;
+
+/**
+ * Composite primary key for CartItem entity.
+ * Consists of customerId, sellerId, and productId.
+ */
 @Embeddable
 public class CartItemId implements Serializable {
 
@@ -11,7 +16,8 @@ public class CartItemId implements Serializable {
     private int sellerId;
     private int productId;
 
-    public CartItemId() {}
+    public CartItemId() {
+    }
 
     public CartItemId(int customerId, int sellerId, int productId) {
         this.customerId = customerId;
@@ -46,8 +52,10 @@ public class CartItemId implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
         CartItemId that = (CartItemId) o;
         return customerId == that.customerId && sellerId == that.sellerId && productId == that.productId;
     }

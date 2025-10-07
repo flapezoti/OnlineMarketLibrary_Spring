@@ -7,22 +7,28 @@ import com.example.common.events.PaymentFailed;
 import com.example.stock.eventMessaging.AbstractStockConsumer;
 import com.example.stock.service.IStockService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.IOException;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class JsonStockConsumer extends AbstractStockConsumer {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper mapper;  
 
-    public JsonStockConsumer(IStockService stockService) {
+    public JsonStockConsumer(IStockService stockService,
+                             ObjectMapper mapper) {   // Spring will inject the global mapper 
         super(stockService);
+        this.mapper = mapper;
     }
 
     @Override
     protected ProductUpdated deserializeProductUpdated(String payload) {
         try {
-            return objectMapper.readValue(payload, ProductUpdated.class);
-        } catch (Exception e) {
+            return mapper.readValue(payload, ProductUpdated.class);
+        } catch (IOException e) {
             throw new RuntimeException("JSON deserialization failed for ProductUpdated", e);
         }
     }
@@ -30,8 +36,8 @@ public class JsonStockConsumer extends AbstractStockConsumer {
     @Override
     protected ReserveStock deserializeReserveStock(String payload) {
         try {
-            return objectMapper.readValue(payload, ReserveStock.class);
-        } catch (Exception e) {
+            return mapper.readValue(payload, ReserveStock.class);
+        } catch (IOException e) {
             throw new RuntimeException("JSON deserialization failed for ReserveStock", e);
         }
     }
@@ -39,8 +45,8 @@ public class JsonStockConsumer extends AbstractStockConsumer {
     @Override
     protected PaymentConfirmed deserializePaymentConfirmed(String payload) {
         try {
-            return objectMapper.readValue(payload, PaymentConfirmed.class);
-        } catch (Exception e) {
+            return mapper.readValue(payload, PaymentConfirmed.class);
+        } catch (IOException e) {
             throw new RuntimeException("JSON deserialization failed for PaymentConfirmed", e);
         }
     }
@@ -48,10 +54,9 @@ public class JsonStockConsumer extends AbstractStockConsumer {
     @Override
     protected PaymentFailed deserializePaymentFailed(String payload) {
         try {
-            return objectMapper.readValue(payload, PaymentFailed.class);
-        } catch (Exception e) {
+            return mapper.readValue(payload, PaymentFailed.class);
+        } catch (IOException e) {
             throw new RuntimeException("JSON deserialization failed for PaymentFailed", e);
         }
     }
 }
-

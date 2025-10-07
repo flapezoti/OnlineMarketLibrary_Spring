@@ -25,28 +25,31 @@ public class SellerController {
     private static final Logger logger = LoggerFactory.getLogger(SellerController.class);
 
     /**
-     * 添加或更新卖家信息（仅使用 Redis 作为数据存储）
+     * Add or update a seller record
+     * (uses Redis as the sole data storage backend).
      */
     @PostMapping("/")
     public ResponseEntity<?> addSeller(@RequestBody Seller seller) {
         logger.info("Received add seller request: {}", seller);
 
-        // Redis key 格式： seller:{sellerId}
+        // Redis key format: seller:{sellerId}
         String redisKey = "seller:" + seller.getId();
 
-        // Step 1: 尝试从 Redis 中获取 Seller
+        // Step 1: Try to get Seller from Redis
         Seller cachedSeller = sellerRedisTemplate.opsForValue().get(redisKey);
         if (cachedSeller != null) {
-            // 如果已存在，则认为卖家信息已存在，可以选择更新或者拒绝重复添加
+            // If the seller already exists in Redis, treat it as an existing record —
+            // either update it or skip to avoid duplication
             return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                     .body("Seller " + seller.getId() + " already exists.");
         }
 
-        // 如果 Redis 中不存在，则认为是新增卖家，
-        // 直接使用请求中的 seller 对象，并设置 sellerId
+        // If the seller does not exist in Redis, treat it as a new seller.
+        // Directly use the provided seller object and assign a new sellerId.
         seller.setId(seller.getId());
 
-        // Step 2: 保存到 Redis，设置过期时间（例如 30 分钟）
+        // Step 2: Save the seller object into Redis and set an expiration time (e.g.,
+        // 30 minutes)
         sellerRedisTemplate.opsForValue().set(redisKey, seller, 30, java.util.concurrent.TimeUnit.MINUTES);
         logger.info("Seller cached in Redis for seller {}", seller.getId());
 
@@ -55,7 +58,7 @@ public class SellerController {
     }
 
     /**
-     * 获取卖家详情（只从 Redis 获取）
+     * Get seller details (retrieved only from Redis)
      */
     @GetMapping("/{sellerId}")
     public ResponseEntity<?> getSeller(@PathVariable int sellerId) {
@@ -69,7 +72,11 @@ public class SellerController {
     }
 
     /**
-     * 查询卖家仪表盘数据，委托给 SellerService（该服务可以仅基于 Redis 计算汇总数据）
+     * Query seller dashboard data by delegating to {@link SellerService}.
+     * <p>
+     * This method relies on Redis-based aggregation, allowing real-time computation
+     * of summary statistics without involving a relational database.
+     * </p>
      */
     @GetMapping("/dashboard/{sellerId}")
     public ResponseEntity<?> getDashboard(@PathVariable int sellerId) {
@@ -85,7 +92,11 @@ public class SellerController {
     }
 
     /**
-     * 删除卖家数据，仅删除 Redis 中的数据
+     * Delete seller data stored in Redis only.
+     * <p>
+     * This method removes the seller entry from Redis without affecting
+     * any persistent database records.
+     * </p>
      */
     @DeleteMapping("/{sellerId}")
     public ResponseEntity<?> deleteSeller(@PathVariable int sellerId) {
@@ -99,13 +110,14 @@ public class SellerController {
     }
 
     /**
-     * 清理所有卖家数据（例如用于测试），清空所有以 "seller:" 开头的键
+     * Clear all seller data (e.g., for testing purposes) by removing
+     * all Redis keys starting with the prefix "seller:".
      */
     @PatchMapping("/cleanup")
     public ResponseEntity<?> cleanup() {
         logger.warn("Cleanup requested");
         try {
-            // 清除 Redis 中所有卖家键（以 seller: 开头）
+
             sellerRedisTemplate.delete(sellerRedisTemplate.keys("seller:*"));
             return ResponseEntity.status(HttpStatus.ACCEPTED).body("Seller data cleaned");
         } catch (Exception e) {
@@ -116,13 +128,16 @@ public class SellerController {
     }
 
     /**
-     * 重置卖家数据（例如用于测试），根据需要可以清空并初始化数据
+     * Reset all seller data (e.g., for testing purposes).
+     * This may include clearing all existing data and reinitializing
+     * default seller records as needed.
      */
     @PatchMapping("/reset")
     public ResponseEntity<?> reset() {
         logger.warn("Reset requested");
         try {
-            // 此处可以定义如何重置卖家数据，例如删除所有数据并插入初始数据
+            // Define how to reset seller data here, e.g., delete all existing data and
+            // insert initial records
             sellerRedisTemplate.delete(sellerRedisTemplate.keys("seller:*"));
             return ResponseEntity.ok("Seller data reset");
         } catch (Exception e) {

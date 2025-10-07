@@ -8,32 +8,28 @@ import java.util.Optional;
 public interface IStockRepository {
 
     /**
-     * 获取指定 sellerId 与 productId 的库存项，
-     * 使用悲观锁确保数据一致性。
+     * Repository interface for managing stock items.
+     *
+     * <p>
+     * This abstraction defines CRUD and query operations for stock management.
+     * Implementations may use JPA, Redis, or other persistence mechanisms.
+     * </p>
+     *
+     * <p>
+     * You can refer to the implementation examples under
+     * <strong>KafkaSpringbootImplementation</strong> for reference.
+     * </p>
      */
     StockItem findForUpdate(int sellerId, int productId);
 
-    /**
-     * 根据多个 StockItemId 批量查询库存项。
-     */
     List<StockItem> findItemsByIds(List<StockItemId> ids);
 
-    /**
-     * 根据 sellerId 和 productId 查询库存项。
-     */
     Optional<StockItem> findById(StockItemId stockItemId);
 
     Optional<StockItem> findById(int sellerId, int productId);
 
-    /**
-     * 根据 sellerId 查询所有库存项。
-     */
     List<StockItem> findBySellerId(int sellerId);
 
-    /**
-     * 重置库存，将所有库存项设置为活跃状态，
-     * 将版本置为 '0'，保留数量归零，并将可用数量更新为指定值。
-     */
     void reset(int qty);
 
     void save(StockItem stockItem);
@@ -42,8 +38,6 @@ public interface IStockRepository {
 
     void flush();
 
-
     void deleteAll();
 
 }
-

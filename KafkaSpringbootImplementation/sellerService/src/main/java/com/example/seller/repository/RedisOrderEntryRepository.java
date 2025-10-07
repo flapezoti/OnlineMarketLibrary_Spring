@@ -20,8 +20,8 @@ public class RedisOrderEntryRepository implements IOrderEntryRepository {
     private RedisTemplate<String, OrderEntry> orderEntryRedisTemplate;
 
     /**
-     * 生成 Redis key，例如 orderEntry:{customerId}:{orderId}:{sellerId}:{productId}
-     */
+ * Generate a Redis key, e.g. orderEntry:{customerId}:{orderId}:{sellerId}:{productId}
+ */
     private String generateKey(OrderEntryId id) {
         return ORDER_ENTRY_PREFIX
                 + id.getCustomerId() + ":"
@@ -50,7 +50,7 @@ public class RedisOrderEntryRepository implements IOrderEntryRepository {
 
     @Override
     public List<OrderEntry> findAllBySellerId(int sellerId) {
-        // 假设 key 格式为 orderEntry:*:*:{sellerId}:*
+        
         String pattern = ORDER_ENTRY_PREFIX + "*:*:" + sellerId + ":*";
         Set<String> keys = orderEntryRedisTemplate.keys(pattern);
         if (keys == null || keys.isEmpty()) {
@@ -62,7 +62,7 @@ public class RedisOrderEntryRepository implements IOrderEntryRepository {
 
     @Override
     public List<Object[]> findAllSellerAggregates(List<OrderStatus> statuses) {
-        // Redis 不支持复杂的聚合查询，这里加载所有 OrderEntry 数据后，在 Java 层过滤聚合。
+        // Redis does not support complex aggregation queries; here we load all OrderEntry data and perform filtering and aggregation in Java.
         Set<String> keys = orderEntryRedisTemplate.keys(ORDER_ENTRY_PREFIX + "*");
         if (keys == null || keys.isEmpty()) {
             return Collections.emptyList();
@@ -71,12 +71,12 @@ public class RedisOrderEntryRepository implements IOrderEntryRepository {
         if (allEntries == null) {
             return Collections.emptyList();
         }
-        // 过滤出指定状态的数据
+       // Filter data by the specified status
         List<OrderEntry> filtered = allEntries.stream()
                 .filter(entry -> statuses.contains(entry.getOrderStatus()))
                 .collect(Collectors.toList());
-        // 按 sellerId 聚合，计算：
-        // countOrders（唯一 orderId 数量）、countItems、totalAmount、totalFreight、totalInvoice
+        // Aggregate by sellerId and calculate:
+// countOrders (unique orderId count), countItems, totalAmount, totalFreight, totalInvoice
         Map<Integer, Aggregates> aggMap = new HashMap<>();
         for (OrderEntry entry : filtered) {
             int sellerId = entry.getSellerId();
@@ -88,7 +88,8 @@ public class RedisOrderEntryRepository implements IOrderEntryRepository {
             agg.totalInvoice += entry.getTotalInvoice();
             aggMap.put(sellerId, agg);
         }
-        // 将聚合结果封装成 Object[] 数组： [sellerId, countOrders, countItems, totalAmount, totalFreight, totalInvoice]
+        // Wrap the aggregated result into an Object[] array:
+// [sellerId, countOrders, countItems, totalAmount, totalFreight, totalInvoice]
         List<Object[]> result = new ArrayList<>();
         for (Map.Entry<Integer, Aggregates> e : aggMap.entrySet()) {
             Aggregates agg = e.getValue();
@@ -104,7 +105,7 @@ public class RedisOrderEntryRepository implements IOrderEntryRepository {
         return result;
     }
 
-    // 辅助类：存储聚合信息
+    // Helper class: stores aggregation information
     private static class Aggregates {
         Set<Integer> orderIds = new HashSet<>();
         int countItems = 0;

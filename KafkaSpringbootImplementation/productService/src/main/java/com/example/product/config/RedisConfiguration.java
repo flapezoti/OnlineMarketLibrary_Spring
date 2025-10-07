@@ -24,14 +24,11 @@ public class RedisConfiguration {
         return objectMapper;
     }
 
-    // RedisTemplate for Cart
+    // RedisTemplate for Product
     @Bean
-    public RedisTemplate<String, Product> cartRedisTemplate(RedisConnectionFactory connectionFactory) {
+    public RedisTemplate<String, Product> productRedisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Product> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
-
-//        Jackson2JsonRedisSerializer<Product> serializer = new Jackson2JsonRedisSerializer<>(Product.class);
-//        serializer.setObjectMapper(objectMapper());
 
         Jackson2JsonRedisSerializer<Product> serializer = new Jackson2JsonRedisSerializer<>(objectMapper(), Product.class);
 

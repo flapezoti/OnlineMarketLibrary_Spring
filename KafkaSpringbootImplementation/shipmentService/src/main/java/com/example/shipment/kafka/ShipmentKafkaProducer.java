@@ -24,14 +24,14 @@ public class ShipmentKafkaProducer implements IEventPublisher {
     @Autowired
     private ObjectMapper objectMapper;
 
-    // 定义各个主题名称
+    // Define topic names for different event types
     private static final String PAYMENT_CONFIRMED_TOPIC = "payment-confirmed-topic";
     private static final String DELIVERY_NOTIFICATION_TOPIC = "delivery-notification-topic";
     private static final String SHIPMENT_NOTIFICATION_TOPIC = "shipment-notification-topic";
     private static final String TRANSACTION_MARK_TOPIC = "TransactionMark_CUSTOMER_SESSION";
 
     @Override
-    public void publishEvent(String topic, Object event) {
+    public void publishEvent(String topic, Object... event) {
         sendAsJson(topic, event);
     }
 
@@ -55,7 +55,7 @@ public class ShipmentKafkaProducer implements IEventPublisher {
     }
 
     /**
-     * 将消息对象序列化为 JSON 后发送到指定主题。
+     * Serialize the message object into JSON and publish it to the specified topic.
      */
     private void sendAsJson(String topic, Object payload) {
         try {
@@ -66,4 +66,3 @@ public class ShipmentKafkaProducer implements IEventPublisher {
         }
     }
 }
-

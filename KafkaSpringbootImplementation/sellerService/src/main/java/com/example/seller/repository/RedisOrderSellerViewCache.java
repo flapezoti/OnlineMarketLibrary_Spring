@@ -26,11 +26,11 @@ public class RedisOrderSellerViewCache implements IMaterializedViewServiceCache 
         }
     }
 
-//    @Override
-//    public void updateSellerView(int sellerId, SellerDashboard dashboard) {
-//        String key = DASHBOARD_KEY + sellerId;
-//        redisTemplate.opsForValue().set(key, dashboard, 1, TimeUnit.HOURS);
-//    }
+    // @Override
+    // public void updateSellerView(int sellerId, SellerDashboard dashboard) {
+    // String key = DASHBOARD_KEY + sellerId;
+    // redisTemplate.opsForValue().set(key, dashboard, 1, TimeUnit.HOURS);
+    // }
 
     @Override
     public OrderSellerView getSellerView(int sellerId) {
@@ -40,14 +40,15 @@ public class RedisOrderSellerViewCache implements IMaterializedViewServiceCache 
 
     @Override
     public void updateSellerView(int sellerId, OrderSellerView view) {
-        // 构造 Redis key，比如 "sellerDashboard:123"
+        // Construct Redis key, e.g., "sellerDashboard:123"
         String key = DASHBOARD_KEY + sellerId;
-        // 根据业务逻辑将 OrderSellerView 封装到 SellerDashboard 中
+        // Based on business logic, wrap OrderSellerView into a SellerDashboard object
         SellerDashboard dashboard = new SellerDashboard();
         dashboard.setSellerView(view);
-        // 如果有订单详情数据，也可以设置; 此处简单只包装了 view
+        // If detailed order information is available, it can also be included here;
+        // for simplicity, this example only wraps the aggregated view.
         redisTemplate.opsForValue().set(key, dashboard, 1, TimeUnit.HOURS);
-//        // 将 view 对象存入 Redis，同时设置 1 小时有效期
-//        redisTemplate.opsForValue().set(key, view, 1, TimeUnit.HOURS);
+        // Store the view object in Redis with a 1-hour expiration time
+        // redisTemplate.opsForValue().set(key, view, 1, TimeUnit.HOURS);
     }
 }

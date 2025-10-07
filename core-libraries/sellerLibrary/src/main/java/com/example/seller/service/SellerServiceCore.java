@@ -24,45 +24,71 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Core implementation of {@link ISellerService}.
+ *
+ * <p>
+ * This class encapsulates the business logic for the Seller microservice,
+ * handling
+ * domain events such as {@code InvoiceIssued}, {@code PaymentConfirmed}, and
+ * {@code ShipmentNotification}. It interacts with multiple repositories to
+ * persist order state and maintain a consistent seller dashboard view.
+ * </p>
+ *
+ * <p>
+ * Unlike platform-specific implementations, this core class contains no
+ * framework dependencies (e.g., Spring annotations or Kafka bindings),
+ * ensuring full portability across Pub/Sub and RPC platforms.
+ * </p>
+ */
 public class SellerServiceCore implements ISellerService {
 
     private final ISellerRepository sellerRepository;
     private final IOrderEntryRepository orderEntryRepository;
     private final IOrderSellerViewRepository orderSellerViewRepository;
     private final IMaterializedViewService materializedViewService;
-//    private final SellerConfig config;
+    // private final SellerConfig config;
     private final Logger logger = LoggerFactory.getLogger(SellerServiceCore.class);
 
     public SellerServiceCore(ISellerRepository sellerRepository,
-                             IOrderEntryRepository orderEntryRepository,
-                             IOrderSellerViewRepository orderSellerViewRepository,
-                             IMaterializedViewService materializedViewService) {
-//                             SellerConfig config
+            IOrderEntryRepository orderEntryRepository,
+            IOrderSellerViewRepository orderSellerViewRepository,
+            IMaterializedViewService materializedViewService) {
+        // SellerConfig config
         this.sellerRepository = sellerRepository;
         this.orderEntryRepository = orderEntryRepository;
         this.orderSellerViewRepository = orderSellerViewRepository;
         this.materializedViewService = materializedViewService;
-//        this.config = config;
+        // this.config = config;
     }
 
+    /**
+     * Handles {@link InvoiceIssued} event.
+     * <p>
+     * Each {@link OrderItem} in the event payload is transformed into an
+     * {@link OrderEntry}
+     * and persisted to the repository. The entry is marked as {@code INVOICED}.
+     * </p>
+     */
     @Override
     public void processInvoiceIssued(InvoiceIssued invoiceIssued) {
         List<OrderItem> items = invoiceIssued.getItems();
         for (OrderItem item : items) {
+            OrderEntryId pk = new OrderEntryId(
+                    invoiceIssued.getCustomer().getCustomerId(),
+                    invoiceIssued.getOrderId(),
+                    item.getSellerId(),
+                    item.getProductId());
+
             OrderEntry orderEntry = new OrderEntry();
-            orderEntry.setCustomerId(invoiceIssued.getCustomer().getCustomerId());
-            orderEntry.setOrderId(invoiceIssued.getOrderId());
-            orderEntry.setSellerId(item.getSellerId());
-            orderEntry.setProductId(item.getProductId());
+            orderEntry.setId(pk);
             orderEntry.setProductName(item.getProductName());
-            // 其他属性赋值
             orderEntry.setUnitPrice(item.getUnitPrice());
             orderEntry.setQuantity(item.getQuantity());
             orderEntry.setTotalAmount(item.getTotalAmount());
             orderEntry.setTotalInvoice(item.getTotalAmount() + item.getFreightValue());
             orderEntry.setFreightValue(item.getFreightValue());
             orderEntry.setOrderStatus(OrderStatus.INVOICED);
-            // 自然键构造
             orderEntry.setNaturalKey(String.format("%d_%d",
                     invoiceIssued.getCustomer().getCustomerId(),
                     invoiceIssued.getOrderId()));
@@ -70,6 +96,13 @@ public class SellerServiceCore implements ISellerService {
         }
     }
 
+    /**
+     * Handles {@link ShipmentNotification} event.
+     * <p>
+     * Updates order entries based on the shipment status, adjusting order
+     * and delivery statuses accordingly.
+     * </p>
+     */
     @Override
     public void processShipmentNotification(ShipmentNotification shipmentNotification) {
         logger.info("Processing ShipmentNotification for Order ID: {}, Customer ID: {}, Status: {}",
@@ -96,6 +129,12 @@ public class SellerServiceCore implements ISellerService {
         logger.info("Order entries saved successfully for Order ID: {}", shipmentNotification.getOrderId());
     }
 
+    /**
+     * Handles {@link DeliveryNotification} event.
+     * <p>
+     * Updates delivery information such as package ID, delivery date, and status.
+     * </p>
+     */
     @Override
     public void processDeliveryNotification(DeliveryNotification deliveryNotification) {
         Optional<OrderEntry> optionalOrderEntry = orderEntryRepository.findById(new OrderEntryId(
@@ -106,7 +145,8 @@ public class SellerServiceCore implements ISellerService {
 
         OrderEntry orderEntry = optionalOrderEntry.orElseThrow(() -> new RuntimeException(
                 "[ProcessDeliveryNotification] Cannot find order entry for order id "
-                        + deliveryNotification.getOrderId() + " and product id " + deliveryNotification.getProductId()));
+                        + deliveryNotification.getOrderId() + " and product id "
+                        + deliveryNotification.getProductId()));
 
         orderEntry.setPackageId(deliveryNotification.getPackageId());
         orderEntry.setDeliveryDate(deliveryNotification.getDeliveryDate());
@@ -115,7 +155,13 @@ public class SellerServiceCore implements ISellerService {
         orderEntryRepository.save(orderEntry);
     }
 
-
+    /**
+     * Handles {@link PaymentConfirmed} event.
+     * <p>
+     * Marks related order entries as {@code PAYMENT_PROCESSED} once payment is
+     * confirmed.
+     * </p>
+     */
     @Override
     public void processPaymentConfirmed(PaymentConfirmed paymentConfirmed) {
         List<OrderEntry> entries = sellerRepository.findByCustomerIdAndOrderId(
@@ -127,6 +173,13 @@ public class SellerServiceCore implements ISellerService {
         orderEntryRepository.saveAll(entries);
     }
 
+    /**
+     * Handles {@link PaymentFailed} event.
+     * <p>
+     * Marks affected orders as {@code PAYMENT_FAILED}. Logs a warning if no entries
+     * are found.
+     * </p>
+     */
     @Override
     public void processPaymentFailed(PaymentFailed paymentFailed) {
         logger.info("Processing PaymentFailed event: {}", paymentFailed);
@@ -144,6 +197,10 @@ public class SellerServiceCore implements ISellerService {
         logger.info("PaymentFailed processing completed.");
     }
 
+    /**
+     * Queries an aggregated dashboard view for a seller, including both
+     * high-level summary data and detailed order entries.
+     */
     @Override
     public SellerDashboard queryDashboard(int sellerId) {
         try {

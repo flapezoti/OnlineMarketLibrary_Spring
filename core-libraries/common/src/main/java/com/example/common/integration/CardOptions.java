@@ -1,5 +1,8 @@
 package com.example.common.integration;
-
+/**
+ * Represents card details used for payment integration.
+ * Contains card number, expiration date, and CVC code.
+ */
 public class CardOptions {
 
     private String number = "";

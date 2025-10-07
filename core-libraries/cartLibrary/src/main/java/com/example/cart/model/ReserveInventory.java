@@ -2,6 +2,10 @@ package com.example.cart.model;
 
 import java.util.List;
 
+/**
+ * DTO representing a request to reserve inventory for a customer.
+ * Contains customer identifier and list of items to reserve.
+ */
 public class ReserveInventory {
 
     private int customerId;

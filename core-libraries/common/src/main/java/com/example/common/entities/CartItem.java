@@ -1,7 +1,10 @@
 package com.example.common.entities;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-
+/**
+ * Entity representing a single item in a shopping cart.
+ * Includes product details, pricing, quantity, and version.
+ */
 public class CartItem {
     @JsonProperty("SellerId")
     private int sellerId;

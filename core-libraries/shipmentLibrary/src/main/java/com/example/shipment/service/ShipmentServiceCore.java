@@ -24,6 +24,39 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Core implementation of {@link IShipmentService}, handling shipment creation,
+ * updates, and event publishing.
+ *
+ * <p>
+ * This class encapsulates all business logic related to shipments and packages.
+ * It is platform-agnostic and can be reused across multiple implementations
+ * (e.g., Spring Boot, Orleans, or Dapr) as long as the required repository
+ * interfaces and {@link IEventPublisher} are provided.
+ * </p>
+ *
+ * <p>
+ * <b>To use:</b> Instantiate this class by providing implementations of:
+ * <ul>
+ * <li>{@link IShipmentRepository}</li>
+ * <li>{@link IPackageRepository}</li>
+ * <li>{@link IEventPublisher}</li>
+ * </ul>
+ * These dependencies should be implemented in your own infrastructure layer
+ * (for example,
+ * in <code>KafkaSpringbootImplementation</code>).
+ * </p>
+ *
+ * <p>
+ * <b>Responsibilities:</b>
+ * <ul>
+ * <li>Generate shipment and package records upon payment confirmation</li>
+ * <li>Publish shipment and delivery events</li>
+ * <li>Handle poison messages for fault recovery</li>
+ * <li>Update shipment state transitions and send related events</li>
+ * <li>Provide data cleanup operations</li>
+ * </ul>
+ */
 public class ShipmentServiceCore implements IShipmentService {
 
     private static final Logger logger = LoggerFactory.getLogger(ShipmentServiceCore.class);
@@ -31,27 +64,38 @@ public class ShipmentServiceCore implements IShipmentService {
     private final IShipmentRepository shipmentRepository;
     private final IPackageRepository packageRepository;
     private final IEventPublisher eventPublisher;
-//    private final IShipmentConfig config;  // 可选
+    // private final IShipmentConfig config;
 
     public ShipmentServiceCore(IShipmentRepository shipmentRepository,
-                               IPackageRepository packageRepository,
-                               IEventPublisher eventPublisher) {
-//                               IShipmentConfig config
+            IPackageRepository packageRepository,
+            IEventPublisher eventPublisher) {
+        // IShipmentConfig config
         this.shipmentRepository = shipmentRepository;
         this.packageRepository = packageRepository;
         this.eventPublisher = eventPublisher;
-//        this.config = config;
+        // this.config = config;
     }
 
     /**
-     * 处理 PaymentConfirmed 事件，生成 Shipment 和对应的 Package，并发送事件
+     * Processes a {@link PaymentConfirmed} event to create a new {@link Shipment}
+     * and its corresponding {@link Package} entries.
+     *
+     * <p>
+     * After persisting shipment and package data, this method emits:
+     * <ul>
+     * <li>{@link ShipmentNotification} (status = APPROVED)</li>
+     * <li>{@link TransactionMark} (status = SUCCESS)</li>
+     * </ul>
+     * </p>
+     *
+     * @param paymentConfirmed the event indicating that a payment has been
+     *                         successfully processed
      */
     public void processShipment(PaymentConfirmed paymentConfirmed) {
         LocalDateTime now = LocalDateTime.now();
         logger.info("Starting shipment processing for Order ID: {}, Customer ID: {}",
                 paymentConfirmed.getOrderId(), paymentConfirmed.getCustomer().getCustomerId());
 
-        // 组装 Shipment 对象
         Shipment shipment = new Shipment();
         ShipmentId shipmentId = new ShipmentId(paymentConfirmed.getCustomer().getCustomerId(),
                 paymentConfirmed.getOrderId());
@@ -61,7 +105,7 @@ public class ShipmentServiceCore implements IShipmentService {
                 (float) paymentConfirmed.getItems().stream().mapToDouble(OrderItem::getFreightValue).sum());
         shipment.setRequestDate(now);
         shipment.setStatus(ShipmentStatus.APPROVED);
-        // 设置客户地址等信息
+
         shipment.setFirstName(paymentConfirmed.getCustomer().getFirstName());
         shipment.setLastName(paymentConfirmed.getCustomer().getLastName());
         shipment.setStreet(paymentConfirmed.getCustomer().getStreet());
@@ -78,7 +122,6 @@ public class ShipmentServiceCore implements IShipmentService {
                     paymentConfirmed.getOrderId(), e.getMessage(), e);
         }
 
-        // 生成 Package 列表
         int packageIdCounter = 1;
         List<Package> packageList = new ArrayList<>();
         for (OrderItem item : paymentConfirmed.getItems()) {
@@ -98,17 +141,15 @@ public class ShipmentServiceCore implements IShipmentService {
         }
         packageRepository.saveAll(packageList);
 
-        // 发送 ShipmentNotification 事件
         ShipmentNotification shipmentNotification = new ShipmentNotification(
                 paymentConfirmed.getCustomer().getCustomerId(),
                 paymentConfirmed.getOrderId(),
                 now,
                 paymentConfirmed.getInstanceId(),
                 ShipmentStatus.APPROVED);
-//        eventPublisher.sendShipmentNotification(shipmentNotification);
-          eventPublisher.publishEvent("shipment-notification-topic", shipmentNotification);
+        // eventPublisher.sendShipmentNotification(shipmentNotification);
+        eventPublisher.publishEvent("shipment-notification-topic", shipmentNotification);
 
-        // 发送 TransactionMark 事件
         TransactionMark transactionMark = new TransactionMark(
                 paymentConfirmed.getInstanceId(),
                 TransactionType.CUSTOMER_SESSION,
@@ -118,9 +159,6 @@ public class ShipmentServiceCore implements IShipmentService {
         eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
     }
 
-    /**
-     * 处理错误场景时的补救措施，发送 POISON 事件
-     */
     public void processPoisonShipment(PaymentConfirmed paymentConfirmed) {
         TransactionMark transactionMark = new TransactionMark(
                 paymentConfirmed.getInstanceId(),
@@ -132,13 +170,24 @@ public class ShipmentServiceCore implements IShipmentService {
     }
 
     /**
-     * 根据指定 instanceId 查询并更新包裹和 Shipment 状态，
-     * 例如将 Shipment 状态从 APPROVED 更新为 DELIVERY_IN_PROGRESS 或 CONCLUDED，
-     * 并为每个包裹发送 DeliveryNotification。
+     * Updates shipment and package states based on existing open packages.
+     * <p>
+     * This method:
+     * <ul>
+     * <li>Transitions shipments from APPROVED → DELIVERY_IN_PROGRESS →
+     * CONCLUDED</li>
+     * <li>Updates corresponding {@link Package} records</li>
+     * <li>Emits {@link DeliveryNotification} and {@link ShipmentNotification}
+     * events</li>
+     * </ul>
+     * </p>
+     *
+     * @param instanceId the instance identifier for correlation tracking
+     * @throws Exception if the shipment or package cannot be found
      */
     public void updateShipment(String instanceId) throws Exception {
         logger.info("Starting updateShipment for instanceId: {}", instanceId);
-        // 查询待更新的最早包裹数据（由包裹仓库提供接口）
+
         List<Object[]> oldestShipments = packageRepository.getOldestOpenShipmentPerSeller(PackageStatus.SHIPPED);
         logger.info("Found {} oldest shipments to process.", oldestShipments.size());
 
@@ -166,8 +215,8 @@ public class ShipmentServiceCore implements IShipmentService {
     }
 
     /**
-     * 更新包裹的交付状态，并发送 DeliveryNotification 事件，
-     * 同时根据包裹数量更新 Shipment 状态。
+     * Updates package delivery states, emits delivery notifications,
+     * and updates shipment completion status if all packages are delivered.
      */
     private void updatePackageDelivery(List<Package> sellerPackages, String instanceId) throws Exception {
         int customerId = sellerPackages.get(0).getCustomerId();
@@ -178,7 +227,6 @@ public class ShipmentServiceCore implements IShipmentService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 如 Shipment 状态为 APPROVED，则更新为 DELIVERY_IN_PROGRESS
         if (shipment.getStatus() == ShipmentStatus.APPROVED) {
             shipment.setStatus(ShipmentStatus.DELIVERY_IN_PROGRESS);
             shipmentRepository.save(shipment);
@@ -188,9 +236,9 @@ public class ShipmentServiceCore implements IShipmentService {
             eventPublisher.publishEvent("shipment-notification-topic", notification);
         }
 
-        // 获取当前已交付包裹数量
-        int countDelivered = packageRepository.getTotalDeliveredPackagesForOrder(customerId, orderId, PackageStatus.DELIVERED);
-        // 更新每个包裹的状态为 DELIVERED，并发送 DeliveryNotification 事件
+        int countDelivered = packageRepository.getTotalDeliveredPackagesForOrder(customerId, orderId,
+                PackageStatus.DELIVERED);
+        // update state to DELIVERED，and send DeliveryNotification event
         for (Package pack : sellerPackages) {
             pack.setStatus(PackageStatus.DELIVERED);
             pack.setDeliveryDate(now);
@@ -199,12 +247,12 @@ public class ShipmentServiceCore implements IShipmentService {
                     shipment.getCustomerId(), pack.getOrderId(), pack.getPackageId(),
                     pack.getSellerId(), pack.getProductId(), pack.getProductName(),
                     PackageStatus.DELIVERED, now, instanceId);
-            //创建新方法 在eventPublisher中
-            eventPublisher.publishEvent("delivery-notification-topic",delivery);
+            // send event
+            eventPublisher.publishEvent("delivery-notification-topic", delivery);
         }
         packageRepository.saveAll(sellerPackages);
 
-        // 判断是否所有包裹都已交付，如果是则更新 Shipment 状态为 CONCLUDED
+        // if updated, Shipment state set to CONCLUDED
         if (shipment.getPackageCount() == countDelivered + sellerPackages.size()) {
             shipment.setStatus(ShipmentStatus.CONCLUDED);
             shipmentRepository.save(shipment);
@@ -216,10 +264,12 @@ public class ShipmentServiceCore implements IShipmentService {
     }
 
     /**
-     * 清空所有 Shipment 数据（例如测试或重置时使用）
+     * Removes all {@link Shipment} and {@link Package} data.
+     * <p>
+     * Typically used for testing or resetting the system state.
+     * </p>
      */
     public void cleanup() {
         shipmentRepository.deleteAll();
     }
 }
-

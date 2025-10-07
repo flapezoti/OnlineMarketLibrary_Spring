@@ -67,18 +67,18 @@ import java.util.Set;
 @Repository
 public class RedisShipmentRepository implements IShipmentRepository {
 
-    // 定义存储 Shipment 对象的 key 前缀，比如 "shipment:" 开头
+    // Define the key prefix for storing Shipment objects, e.g., "shipment:"
     private static final String SHIPMENT_KEY_PREFIX = "shipment:";
 
     @Autowired
     private RedisTemplate<String, Shipment> redisTemplate;
 
     /**
-     * 删除 Redis 中所有 Shipment 数据
+     * Delete all Shipment data from Redis.
      */
     @Override
     public void deleteAll() {
-        // 查找所有以 SHIPMENT_KEY_PREFIX 开头的 key
+        // Find all keys starting with SHIPMENT_KEY_PREFIX
         Set<String> keys = redisTemplate.keys(SHIPMENT_KEY_PREFIX + "*");
         if (keys != null && !keys.isEmpty()) {
             redisTemplate.delete(keys);
@@ -86,35 +86,35 @@ public class RedisShipmentRepository implements IShipmentRepository {
     }
 
     /**
-     * 根据 ShipmentId 查找 Shipment 对象
+     * Find a Shipment object by its {@link ShipmentId}.
      */
     @Override
     public Optional<Shipment> findById(ShipmentId id) {
-        // 构造 key，假设 id.toString() 方法可以生成唯一标识
+        // Construct the Redis key, assuming id.toString() generates a unique identifier
         String key = SHIPMENT_KEY_PREFIX + id.getCustomerId() + "_" + id.getOrderId();
-//        String key = SHIPMENT_KEY_PREFIX + id.toString();;
+        // String key = SHIPMENT_KEY_PREFIX + id.toString();;
         Shipment shipment = redisTemplate.opsForValue().get(key);
         return Optional.ofNullable(shipment);
     }
 
     /**
-     * 保存 Shipment 到 Redis，存储时设置 key 格式为 "shipment:{id}"
+     * Save a Shipment to Redis with the key format "shipment:{id}".
      */
     @Override
     public void save(Shipment shipment) {
-//        String key = SHIPMENT_KEY_PREFIX + shipment.getId().toString();
+        // String key = SHIPMENT_KEY_PREFIX + shipment.getId().toString();
         String key = SHIPMENT_KEY_PREFIX + shipment.getCustomerId() + "_" + shipment.getOrderId();
 
         redisTemplate.opsForValue().set(key, shipment);
     }
 
     /**
-     * 删除指定的 Shipment 数据
+     * Delete a specific Shipment entry from Redis.
      */
     @Override
     public void deleteShipment(Shipment shipment) {
         String key = SHIPMENT_KEY_PREFIX + shipment.getCustomerId() + "_" + shipment.getOrderId();
-//        String key = SHIPMENT_KEY_PREFIX + shipment.getId().toString();
+        // String key = SHIPMENT_KEY_PREFIX + shipment.getId().toString();
         redisTemplate.delete(key);
     }
 }

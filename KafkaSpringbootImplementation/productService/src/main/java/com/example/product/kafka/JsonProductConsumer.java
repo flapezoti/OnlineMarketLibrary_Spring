@@ -13,11 +13,12 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class JsonProductConsumer extends AbstractProductConsumer{
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     //check
-    public JsonProductConsumer(IProductRepository productRepository, IEventPublisher eventPublisher) {
+    public JsonProductConsumer(IProductRepository productRepository, IEventPublisher eventPublisher, ObjectMapper objectMapper) {
         super(productRepository, eventPublisher);
+        this.objectMapper = objectMapper;
     }
 
 

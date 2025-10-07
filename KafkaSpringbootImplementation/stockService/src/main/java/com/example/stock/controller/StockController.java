@@ -21,7 +21,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/stock")
 public class StockController {
-    
+
     @Autowired
     private IStockService stockService;
 
@@ -30,10 +30,11 @@ public class StockController {
 
     private static final Logger logger = LoggerFactory.getLogger(StockController.class);
 
-
     /**
-     * 增加库存数量接口。根据传入的 IncreaseStock 请求，
-     * 查找指定库存项，如果不存在则返回 404；否则调用服务更新库存。
+     * API endpoint to increase stock quantity.
+     * Based on the provided {@link IncreaseStock} request, this method locates
+     * the specified stock item. If the item does not exist, it returns HTTP 404;
+     * otherwise, it delegates the update operation to the service layer.
      */
     @PatchMapping("/")
     public ResponseEntity<Void> increaseStock(@RequestBody IncreaseStock increaseStock) {
@@ -44,20 +45,21 @@ public class StockController {
             logger.info("[IncreaseStock] Item not found for product id: {}", increaseStock.getProductId());
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
-        // 调用服务层方法更新库存
+        // call service method to update stock
         stockService.increaseStock(increaseStock);
         logger.info("[IncreaseStock] completed for product id: {}", increaseStock.getProductId());
         return new ResponseEntity<>(HttpStatus.ACCEPTED);
     }
 
     /**
-     * 新增库存项接口（添加新的库存产品记录）
+     * API endpoint to create a new stock item.
+     * Adds a new product record into the stock system.
      */
     @PostMapping("/")
     public ResponseEntity<Void> addStockItem(@RequestBody com.example.common.entities.StockItem commonStockItem) {
         logger.info("[AddStockItem] received for product id: {}", commonStockItem.getProduct_id());
         try {
-            // 将通用的库存实体转换为内部模型 StockItem
+            // change the uniform style to Common StockItem
             StockItemId stockItemId = new StockItemId(commonStockItem.getSeller_id(), commonStockItem.getProduct_id());
             StockItem stockItem = new StockItem();
             stockItem.setId(stockItemId);
@@ -69,7 +71,7 @@ public class StockController {
             stockItem.setVersion(commonStockItem.getVersion());
             stockItem.setUpdatedAt(LocalDateTime.now());
 
-            // 调用服务层创建库存记录
+            // call service layer to create stock item
             stockService.createStockItem(stockItem);
 
             logger.info("[AddStockItem] completed for product id: {}", stockItem.getId().getProductId());
@@ -81,11 +83,11 @@ public class StockController {
     }
 
     /**
-     * 根据 sellerId 与 productId 查询库存项接口
+     * API endpoint to query a stock item by sellerId and productId.
      */
     @GetMapping("/{sellerId}/{productId}")
     public ResponseEntity<StockItem> getBySellerIdAndProductId(@PathVariable int sellerId,
-                                                               @PathVariable int productId) {
+            @PathVariable int productId) {
         StockItemId stockItemId = new StockItemId(sellerId, productId);
         Optional<StockItem> stockOpt = stockRepository.findById(stockItemId);
         if (stockOpt.isPresent()) {
@@ -95,7 +97,7 @@ public class StockController {
     }
 
     /**
-     * 查询指定 seller 的所有库存项接口
+     * API endpoint to query all stock items belonging to a specific seller.
      */
     @GetMapping("/{sellerId}")
     public ResponseEntity<List<StockItem>> getBySellerId(@PathVariable int sellerId) {
@@ -112,7 +114,7 @@ public class StockController {
     }
 
     /**
-     * 清理所有库存数据接口（用于测试或重置）
+     * clean all the request for test, do not use it for real scenario. 
      */
     @PatchMapping("/cleanup")
     public ResponseEntity<Void> cleanup() {
@@ -122,7 +124,7 @@ public class StockController {
     }
 
     /**
-     * 重置库存数据接口（用于测试或系统重置）
+     * reset the stock data
      */
     @PatchMapping("/reset")
     public ResponseEntity<Void> reset() {
@@ -131,6 +133,4 @@ public class StockController {
         return ResponseEntity.ok().build();
     }
 
-
 }
-

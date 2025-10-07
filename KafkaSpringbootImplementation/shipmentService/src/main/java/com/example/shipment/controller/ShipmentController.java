@@ -34,23 +34,24 @@ public class ShipmentController {
     private static final String SHIPMENT_KEY_PREFIX = "shipment:";
 
     /**
-     * 新增 Shipment 数据（仅使用 Redis 作为数据库）
+     * Add a new Shipment entry (using Redis as the only data store).
      */
     @PostMapping("/")
     public ResponseEntity<?> addShipment(@RequestBody Shipment shipment) {
         try {
             String redisKey = SHIPMENT_KEY_PREFIX + shipment.getId().toString();
 
-            // 检查 Redis 中是否已存在该 Shipment
+            // Check if the Shipment already exists in Redis
             Shipment cachedShipment = shipmentRedisTemplate.opsForValue().get(redisKey);
             if (cachedShipment != null) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
                         .body("Shipment already exists with id: " + shipment.getId());
             }
 
-            // 保存到 Redis，设置1小时过期时间（如有需要可以调整）
+            // Save the Shipment to Redis with a 1-hour expiration time (adjustable if
+            // needed)
             shipmentRedisTemplate.opsForValue().set(redisKey, shipment, 1, TimeUnit.HOURS);
-            // 使用 Redis 基于仓库保存
+            // Save using the Redis-based repository implementation
             shipmentRepository.save(shipment);
 
             logger.info("Shipment added, id: {}", shipment.getId());
@@ -63,7 +64,7 @@ public class ShipmentController {
 
     @GetMapping("/{customerId}/{orderId}")
     public ResponseEntity<Shipment> getShipment(@PathVariable int customerId, @PathVariable int orderId) {
-        // 构造 Redis Key，确保与保存时保持一致
+        // Construct the Redis key, ensuring consistency with the key used during save
         String redisKey = SHIPMENT_KEY_PREFIX + customerId + "_" + orderId;
         Shipment shipment = shipmentRedisTemplate.opsForValue().get(redisKey);
         if (shipment == null) {
@@ -73,30 +74,29 @@ public class ShipmentController {
         return ResponseEntity.ok(shipment);
     }
 
-
     @PatchMapping("/{instanceId}")
     public ResponseEntity<Void> updateShipment(@PathVariable("instanceId") String instanceId) {
         try {
-            // 调用Service做更新逻辑
+            // Call the Service layer to perform update logic
             shipmentService.updateShipment(instanceId);
-            return ResponseEntity.accepted().build(); // 单测里期待 202
+            return ResponseEntity.accepted().build(); // Expect HTTP status 202 (Accepted) in unit test
         } catch (Exception e) {
             logger.error("Failed to update shipment", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
-
     /**
-     * 删除指定 Shipment 数据
+     * Delete a specific Shipment record.
      */
     @DeleteMapping("/{shipmentId}")
     public ResponseEntity<?> deleteShipment(@PathVariable String shipmentId) {
         try {
             String redisKey = SHIPMENT_KEY_PREFIX + shipmentId;
             shipmentRedisTemplate.delete(redisKey);
-            // 如有需要，调用仓库层删除对应数据
-            // shipmentRepository.deleteShipment(对应Shipment对象);
+            // If needed, call the repository layer to delete the corresponding Shipment
+            // record
+            // shipmentRepository.deleteShipment(targetShipment);
             logger.info("Shipment deleted, id: {}", shipmentId);
             return ResponseEntity.accepted().build();
         } catch (Exception e) {
@@ -106,7 +106,8 @@ public class ShipmentController {
     }
 
     /**
-     * 清理所有 Shipment 数据（例如用于测试或重置数据）
+     * Cleans up all Shipment data (for example, used in tests or when resetting the
+     * dataset).
      */
     @PatchMapping("/cleanup")
     public ResponseEntity<?> cleanup() {
@@ -121,12 +122,13 @@ public class ShipmentController {
     }
 
     /**
-     * 重置 Shipment 数据（根据业务需求实现）
+     * Resets Shipment data (implement according to specific business needs).
      */
     @PatchMapping("/reset")
     public ResponseEntity<?> reset() {
         try {
-            // 如果有重置逻辑，可调用 shipmentRepository.reset() 或其他方法
+            // If a reset logic exists, you can call shipmentRepository.reset() or similar
+            // methods.
             logger.info("Shipments reset requested");
             return ResponseEntity.ok("Shipments reset");
         } catch (Exception e) {
@@ -136,7 +138,10 @@ public class ShipmentController {
     }
 
     /**
-     * 异步更新 Shipment 数据，如果需要将数据同步到其他存储，可使用 @Async 异步方法
+     * Asynchronously update Shipment data.
+     * If synchronization with other storage systems is required,
+     * this method can be annotated with {@code @Async} to perform
+     * updates in a non-blocking manner.
      */
     @Async
     public void asyncUpdateShipment(Shipment shipment) {

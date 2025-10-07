@@ -3,6 +3,10 @@ package com.example.common.events;
 import java.time.LocalDateTime;
 import com.example.common.entities.PackageStatus;
 
+/**
+ * Event representing a delivery notification.
+ * Contains customer, order, package, product, status, and delivery details.
+ */
 public class DeliveryNotification {
 
     private int customerId;
@@ -16,10 +20,24 @@ public class DeliveryNotification {
     private String instanceId;
 
     // Default constructor
-    public DeliveryNotification() {}
+    public DeliveryNotification() {
+    }
 
-    // Constructor with parameters
-    public DeliveryNotification(int customerId, int orderId, int packageId, int sellerId, int productId, String productName, PackageStatus status, LocalDateTime deliveryDate, String instanceId) {
+      /**
+     * Constructor with all parameters.
+     *
+     * @param customerId customer ID
+     * @param orderId order ID
+     * @param packageId package ID
+     * @param sellerId seller ID
+     * @param productId product ID
+     * @param productName product name
+     * @param status package status
+     * @param deliveryDate delivery date
+     * @param instanceId instance ID
+     */
+    public DeliveryNotification(int customerId, int orderId, int packageId, int sellerId, int productId,
+            String productName, PackageStatus status, LocalDateTime deliveryDate, String instanceId) {
         this.customerId = customerId;
         this.orderId = orderId;
         this.packageId = packageId;

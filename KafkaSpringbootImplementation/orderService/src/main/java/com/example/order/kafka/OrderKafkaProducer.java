@@ -28,7 +28,7 @@ public class OrderKafkaProducer implements IEventPublisher {
     private static final String TRANSACTION_TOPIC = "TransactionMark_CUSTOMER_SESSION";
 
     @Override
-    public void publishEvent(String topic, Object event) {
+    public void publishEvent(String topic, Object ...event) {
         sendAsJson(topic, event);
     }
 

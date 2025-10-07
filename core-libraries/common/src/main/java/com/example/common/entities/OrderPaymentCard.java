@@ -1,24 +1,36 @@
 package com.example.common.entities;
 
+/**
+ * Entity representing credit card payment details for an order.
+ * Contains card information such as number, holder name, expiration, and brand.
+ */
 public class OrderPaymentCard {
 
- 
     private int orderId;
     private int paymentSequential;
-
 
     private String cardNumber = "";
     private String cardHolderName = "";
     private String cardExpiration = "";
-    // private String cardSecurityNumber; 
+    // private String cardSecurityNumber;
 
     private String cardBrand = "";
 
-  
-    public OrderPaymentCard() {}
+    public OrderPaymentCard() {
+    }
 
-   
-    public OrderPaymentCard(int orderId, int paymentSequential, String cardNumber, String cardHolderName, String cardExpiration, String cardBrand) {
+    /**
+     * Constructor with all parameters.
+     *
+     * @param orderId           order ID
+     * @param paymentSequential payment sequential number
+     * @param cardNumber        credit card number
+     * @param cardHolderName    card holder name
+     * @param cardExpiration    card expiration date
+     * @param cardBrand         card brand
+     */
+    public OrderPaymentCard(int orderId, int paymentSequential, String cardNumber, String cardHolderName,
+            String cardExpiration, String cardBrand) {
         this.orderId = orderId;
         this.paymentSequential = paymentSequential;
         this.cardNumber = cardNumber;
@@ -76,11 +88,10 @@ public class OrderPaymentCard {
         this.cardBrand = cardBrand;
     }
 
-
     @Override
     public String toString() {
-        return "OrderPaymentCard [orderId=" + orderId + ", paymentSequential=" + paymentSequential + 
-               ", cardNumber=" + cardNumber + ", cardHolderName=" + cardHolderName + 
-               ", cardExpiration=" + cardExpiration + ", cardBrand=" + cardBrand + "]";
+        return "OrderPaymentCard [orderId=" + orderId + ", paymentSequential=" + paymentSequential +
+                ", cardNumber=" + cardNumber + ", cardHolderName=" + cardHolderName +
+                ", cardExpiration=" + cardExpiration + ", cardBrand=" + cardBrand + "]";
     }
 }

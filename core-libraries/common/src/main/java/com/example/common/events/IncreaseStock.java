@@ -1,15 +1,25 @@
 package com.example.common.events;
 
+/**
+ * Event representing a request to increase product stock.
+ * Contains seller, product, and quantity information.
+ */
 public class IncreaseStock {
 
     private int sellerId;
     private int productId;
     private int quantity;
 
+    public IncreaseStock() {
+    }
 
-    public IncreaseStock() {}
-
-
+    /**
+     * Constructor with all parameters.
+     *
+     * @param sellerId  seller ID
+     * @param productId product ID
+     * @param quantity  quantity to increase
+     */
     public IncreaseStock(int sellerId, int productId, int quantity) {
         this.sellerId = sellerId;
         this.productId = productId;

@@ -9,10 +9,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class JsonShipmentConsumer extends AbstractShipmentConsumer {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
-    public JsonShipmentConsumer(IShipmentService shipmentService) {
+    public JsonShipmentConsumer(IShipmentService shipmentService,ObjectMapper objectMapper) {
         super(shipmentService);
+        this.objectMapper = objectMapper;
     }
 
     @Override

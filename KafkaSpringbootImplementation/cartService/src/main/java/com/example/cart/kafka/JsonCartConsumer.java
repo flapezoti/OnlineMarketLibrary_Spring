@@ -5,15 +5,21 @@ import com.example.cart.service.ICartService;
 import com.example.common.events.PriceUpdate;
 import com.example.common.events.ProductUpdated;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+
 import org.springframework.stereotype.Service;
 
 @Service
 public class JsonCartConsumer extends AbstractCartConsumer {
+    private final Logger logger = LoggerFactory.getLogger(getClass());
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
-    public JsonCartConsumer(ICartService cartService) {
+    public JsonCartConsumer(ICartService cartService, ObjectMapper objectMapper) {
         super(cartService);
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -21,7 +27,8 @@ public class JsonCartConsumer extends AbstractCartConsumer {
         try {
             return objectMapper.readValue(payload, PriceUpdate.class);
         } catch (Exception e) {
-            throw new RuntimeException("JSON deserialization failed for PriceUpdate", e);
+            logger.warn("Failed to deserialize PriceUpdate, payload will be aborted: {}", payload);
+            return null;
         }
     }
 
@@ -30,7 +37,8 @@ public class JsonCartConsumer extends AbstractCartConsumer {
         try {
             return objectMapper.readValue(payload, ProductUpdated.class);
         } catch (Exception e) {
-            throw new RuntimeException("JSON deserialization failed for ProductUpdated", e);
+            logger.warn("Failed to deserialize ProductUpdated, payload will be aborted: {}", payload);
+            return null;
         }
     }
 }

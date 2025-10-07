@@ -1,5 +1,9 @@
 package com.example.common.entities;
 
+/**
+ * Entity representing the status of a product.
+ * Includes availability, pricing, and item status information.
+ */
 public class ProductStatus {
 
     private int id;
@@ -8,9 +12,17 @@ public class ProductStatus {
     private float oldUnitPrice = 0;
     private int qtyAvailable = 0;
 
+    public ProductStatus() {
+    }
 
-    public ProductStatus() {}
-
+    /**
+     * Constructor with ID, status, and pricing.
+     *
+     * @param id           product ID
+     * @param status       product status
+     * @param unitPrice    current unit price
+     * @param oldUnitPrice previous unit price
+     */
 
     public ProductStatus(int id, ItemStatus status, float unitPrice, float oldUnitPrice) {
         this.id = id;
@@ -19,12 +31,10 @@ public class ProductStatus {
         this.oldUnitPrice = oldUnitPrice;
     }
 
-
     public ProductStatus(int id, ItemStatus status) {
         this.id = id;
         this.status = status;
     }
-
 
     public ProductStatus(int id, ItemStatus status, int qtyAvailable) {
         this.id = id;

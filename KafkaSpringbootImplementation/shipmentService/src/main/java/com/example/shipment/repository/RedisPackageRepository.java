@@ -20,16 +20,18 @@ public class RedisPackageRepository implements IPackageRepository {
     private RedisTemplate<String, Package> redisTemplate;
 
     /**
-     * 根据 Package 对象生成唯一的 Redis key，
-     * 格式：package:{customerId}:{orderId}:{sellerId}:{packageId}
+     * Generate a unique Redis key based on the Package object.
+     * Format: package:{customerId}:{orderId}:{sellerId}:{packageId}
      */
     private String generateKey(Package pkg) {
         PackageId id = pkg.getId();
-        return PACKAGE_PREFIX + id.getCustomerId() + ":" + id.getOrderId() + ":" + pkg.getSellerId() + ":" + id.getPackageId();
+        return PACKAGE_PREFIX + id.getCustomerId() + ":" + id.getOrderId() + ":" + pkg.getSellerId() + ":"
+                + id.getPackageId();
     }
 
     /**
-     * 根据各字段生成查询 pattern，如果 sellerId 为 null，则匹配所有该部分
+     * Generate a query pattern based on the provided fields.
+     * If sellerId is null, the pattern will match all entries for that part.
      */
     private String generatePattern(Integer customerId, Integer orderId, Integer sellerId) {
         StringBuilder sb = new StringBuilder(PACKAGE_PREFIX);
@@ -40,14 +42,15 @@ public class RedisPackageRepository implements IPackageRepository {
     }
 
     /**
-     * 从 Redis 中获取所有包裹数据，并进行聚合计算，
-     * 返回每个卖家最早（按 customerId|orderId 字符串比较）的订单号。
-     * 返回结果为 List<Object[]>，每个元素包含：
+     * Retrieve all package data from Redis and perform aggregation.
+     * Returns the earliest order ID (by lexicographic comparison of
+     * "customerId|orderId") for each seller.
+     * The result is a List<Object[]>, where each element contains:
      * [sellerId, "customerId|orderId"]
      */
     @Override
     public List<Object[]> getOldestOpenShipmentPerSeller(PackageStatus status) {
-        // 获取所有包裹 key
+        // Retrieve all package keys from Redis
         Set<String> keys = redisTemplate.keys(PACKAGE_PREFIX + "*");
         if (keys == null || keys.isEmpty()) {
             return Collections.emptyList();
@@ -56,31 +59,33 @@ public class RedisPackageRepository implements IPackageRepository {
         if (allPackages == null) {
             return Collections.emptyList();
         }
-        // 筛选状态符合的包裹
+        // Filter packages that match the target status
         List<Package> filtered = allPackages.stream()
                 .filter(pkg -> pkg.getStatus() == status)
                 .collect(Collectors.toList());
-        // 按 sellerId 分组，同时组内比较 (customerId|orderId) 的最小值
+        // Group packages by sellerId, and within each group, find the smallest
+        // (customerId|orderId) value
         Map<Integer, String> aggregate = new HashMap<>();
         for (Package pkg : filtered) {
             int sellerId = pkg.getSellerId();
             String orderKey = pkg.getId().getCustomerId() + "|" + pkg.getId().getOrderId();
-            aggregate.merge(sellerId, orderKey, (existing, current) ->
-                    (current.compareTo(existing) < 0) ? current : existing);
+            aggregate.merge(sellerId, orderKey,
+                    (existing, current) -> (current.compareTo(existing) < 0) ? current : existing);
         }
-        // 将聚合结果转换为 List<Object[]>: [sellerId, orderKey]
+        // Convert aggregation result to List<Object[]>: [sellerId, orderKey]
         List<Object[]> result = new ArrayList<>();
         for (Map.Entry<Integer, String> entry : aggregate.entrySet()) {
-            result.add(new Object[]{entry.getKey(), entry.getValue()});
+            result.add(new Object[] { entry.getKey(), entry.getValue() });
         }
         return result;
     }
 
     /**
-     * 根据 customerId、orderId、sellerId 和指定状态查询包裹
+     * Query packages by customerId, orderId, sellerId, and the specified status.
      */
     @Override
-    public List<Package> getShippedPackagesByOrderAndSeller(int customerId, int orderId, int sellerId, PackageStatus status) {
+    public List<Package> getShippedPackagesByOrderAndSeller(int customerId, int orderId, int sellerId,
+            PackageStatus status) {
         String pattern = generatePattern(customerId, orderId, sellerId);
         Set<String> keys = redisTemplate.keys(pattern);
         if (keys == null || keys.isEmpty()) {
@@ -96,7 +101,8 @@ public class RedisPackageRepository implements IPackageRepository {
     }
 
     /**
-     * 根据 customerId 与 orderId 查询包裹中指定状态的数量
+     * Query the number of packages with the specified status
+     * for the given customerId and orderId.
      */
     @Override
     public int getTotalDeliveredPackagesForOrder(int customerId, int orderId, PackageStatus status) {
@@ -115,7 +121,8 @@ public class RedisPackageRepository implements IPackageRepository {
     }
 
     /**
-     * 查询指定 customerId 与 orderId 的所有包裹
+     * Retrieve all packages associated with the specified
+     * customerId and orderId.
      */
     @Override
     public List<Package> findAllByOrderIdAndCustomerId(int customerId, int orderId) {
@@ -129,7 +136,7 @@ public class RedisPackageRepository implements IPackageRepository {
     }
 
     /**
-     * 删除所有以 PACKAGE_PREFIX 开头的 Package 数据
+     * Delete all package data whose keys start with PACKAGE_PREFIX.
      */
     @Override
     public void deleteAll() {
@@ -140,7 +147,7 @@ public class RedisPackageRepository implements IPackageRepository {
     }
 
     /**
-     * 保存单个 Package 到 Redis，使用过期时间 1 小时
+     * Save a single Package object to Redis with a 1-hour expiration time.
      */
     @Override
     public void savePackage(Package pkg) {
@@ -149,11 +156,12 @@ public class RedisPackageRepository implements IPackageRepository {
     }
 
     /**
-     * 批量保存 Package 到 Redis
+     * Save multiple Package objects to Redis in batch mode.
      */
     @Override
     public void saveAll(List<Package> packages) {
-        if (packages == null || packages.isEmpty()) return;
+        if (packages == null || packages.isEmpty())
+            return;
         Map<String, Package> map = new HashMap<>();
         for (Package pkg : packages) {
             map.put(generateKey(pkg), pkg);
@@ -162,7 +170,7 @@ public class RedisPackageRepository implements IPackageRepository {
     }
 
     /**
-     * 保存 Package，调用 savePackage 方法
+     * Save a single Package by delegating to {@link #savePackage(Package)}.
      */
     @Override
     public void save(Package pack) {

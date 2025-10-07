@@ -28,7 +28,7 @@ public class StockKafkaProducer implements IEventPublisher {
     @Autowired
     private ObjectMapper objectMapper;
 
-    // 定义各个主题名称
+    // define the topic
     private static final String TRANSACTION_MARK_UPDATE_PRODUCT = "TransactionMark_UPDATE_PRODUCT";
     private static final String TRANSACTION_MARK_CUSTOMER_SESSION = "TransactionMark_CUSTOMER_SESSION";
     private static final String STOCK_CONFIRMED_TOPIC = "stock-confirmed-topic";
@@ -37,7 +37,7 @@ public class StockKafkaProducer implements IEventPublisher {
     private static final String STOCK_UPDATE_TOPIC = "stock-update-topic";
 
     @Override
-    public void publishEvent(String topic, Object event) {
+    public void publishEvent(String topic, Object ...event) {
         sendAsJson(topic, event);
     }
 

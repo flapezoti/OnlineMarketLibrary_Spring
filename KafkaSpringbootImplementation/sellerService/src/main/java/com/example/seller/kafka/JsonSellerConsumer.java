@@ -13,10 +13,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class JsonSellerConsumer extends AbstractSellerConsumer {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
-    public JsonSellerConsumer(ISellerService sellerService) {
+    public JsonSellerConsumer(ISellerService sellerService,ObjectMapper objectMapper) {
         super(sellerService);
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -24,6 +25,7 @@ public class JsonSellerConsumer extends AbstractSellerConsumer {
         try {
             return objectMapper.readValue(payload, InvoiceIssued.class);
         } catch (Exception e) {
+            logger.error("InvoiceIssued JSON → {}", payload);
             throw new RuntimeException("JSON deserialization failed for InvoiceIssued", e);
         }
     }

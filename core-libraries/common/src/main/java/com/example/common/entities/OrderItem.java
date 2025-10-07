@@ -1,7 +1,9 @@
 package com.example.common.entities;
 
 import java.time.LocalDateTime;
-
+/**
+ * Entity for a single order item, including product and pricing details.
+ */
 public class OrderItem {
 
     private int orderId;

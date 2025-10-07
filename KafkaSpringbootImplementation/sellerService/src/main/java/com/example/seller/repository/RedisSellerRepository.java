@@ -16,7 +16,8 @@ import java.util.concurrent.TimeUnit;
 public class RedisSellerRepository implements ISellerRepository {
 
     private static final String SELLER_PREFIX = "seller:";
-    private static final String ORDER_ENTRY_PREFIX = "orderEntry:";  // 假设订单条目存储方式：orderEntry:{customerId}:{orderId}:{...}
+    private static final String ORDER_ENTRY_PREFIX = "orderEntry:"; // Assume order entries are stored with keys like:
+                                                                    // orderEntry:{customerId}:{orderId}:{...}
     private static final String SELLER_DASHBOARD_PREFIX = "sellerDashboard:";
 
     @Autowired
@@ -25,14 +26,14 @@ public class RedisSellerRepository implements ISellerRepository {
     @Autowired
     private RedisTemplate<String, OrderEntry> orderEntryRedisTemplate;
 
-
-//    @Qualifier("orderSellerViewRedisTemplate")
+    // @Qualifier("orderSellerViewRedisTemplate")
     @Autowired
     private RedisTemplate<String, SellerDashboard> sellerDashboardRedisTemplate;
 
     /**
-     * 根据 customerId 和 orderId 查询订单条目集合
-     * 这里假设订单条目的 key 格式为：orderEntry:{customerId}:{orderId}:{uniquePart}
+     * Query order entries by customerId and orderId.
+     * Assumes that the key format for order entries is:
+     * orderEntry:{customerId}:{orderId}:{uniquePart}
      */
     @Override
     public List<OrderEntry> findByCustomerIdAndOrderId(int customerId, int orderId) {
@@ -44,8 +45,9 @@ public class RedisSellerRepository implements ISellerRepository {
     }
 
     /**
-     * 根据订单条目的唯一 id（假设直接用 int id 存储）查询订单条目
-     * key 格式：orderEntry:{id}
+     * Query a single order entry by its unique ID (assumed to be stored as an
+     * integer).
+     * Redis key format: orderEntry:{id}
      */
     @Override
     public OrderEntry findById(int id) {
@@ -53,7 +55,8 @@ public class RedisSellerRepository implements ISellerRepository {
     }
 
     /**
-     * 从 Redis 中获取卖家仪表盘数据，key 格式：sellerDashboard:{sellerId}
+     * Retrieve the seller dashboard data from Redis.
+     * Redis key format: sellerDashboard:{sellerId}
      */
     @Override
     public SellerDashboard queryDashboard(int sellerId) {
@@ -61,7 +64,8 @@ public class RedisSellerRepository implements ISellerRepository {
     }
 
     /**
-     * 删除所有卖家数据，删除所有 key 以 seller: 开头的数据
+     * Delete all seller data by removing every Redis key
+     * that starts with the prefix "seller:".
      */
     @Override
     public void deleteAllSellers() {
@@ -72,7 +76,8 @@ public class RedisSellerRepository implements ISellerRepository {
     }
 
     /**
-     * 删除所有订单条目数据，删除所有 key 以 orderEntry: 开头的数据
+     * Delete all order entry data by removing every Redis key
+     * that starts with the prefix "orderEntry:".
      */
     @Override
     public void deleteAllOrderEntries() {
@@ -83,7 +88,8 @@ public class RedisSellerRepository implements ISellerRepository {
     }
 
     /**
-     * 删除所有卖家相关数据（包括卖家、订单条目和仪表盘数据）
+     * Delete all seller-related data, including sellers, order entries,
+     * and dashboard data stored in Redis.
      */
     @Override
     public void deleteAll() {
@@ -96,7 +102,8 @@ public class RedisSellerRepository implements ISellerRepository {
     }
 
     /**
-     * 保存卖家信息到 Redis，使用 key 格式：seller:{sellerId}，并设置一个过期时间（例如 30 分钟）
+     * Save the seller information into Redis, using the key format:
+     * seller:{sellerId}, and set an expiration time (e.g., 30 minutes).
      */
     @Override
     public void save(Seller seller) {
@@ -111,4 +118,3 @@ public class RedisSellerRepository implements ISellerRepository {
     }
 
 }
-

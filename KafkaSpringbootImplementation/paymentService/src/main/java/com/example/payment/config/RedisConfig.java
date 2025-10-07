@@ -20,8 +20,8 @@ public class RedisConfig {
 
     private ObjectMapper objectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule()); // 支持 Java 8 日期时间
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // 用字符串表示日期
+        objectMapper.registerModule(new JavaTimeModule()); 
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); 
         objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
         return objectMapper;
     }

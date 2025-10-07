@@ -39,7 +39,7 @@ public class ProductController {
         }
 
         List<Product> products = productRepository.findByIdSellerId(sellerId);
-        if (products.isEmpty()) {
+        if (products == null || products.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
 
@@ -53,52 +53,57 @@ public class ProductController {
             return ResponseEntity.badRequest().body(null);
         }
 
-        Optional<Product> product = productRepository.findById(new ProductId(sellerId, productId));
-        if (!product.isPresent()) {
+        Optional<Product> productOpt = productRepository.findById(new ProductId(sellerId, productId));
+        if (!productOpt.isPresent()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
         }
 
-        return ResponseEntity.ok(product.get());
+        return ResponseEntity.ok(productOpt.get());
     }
 
     @PostMapping("/")
-    public ResponseEntity<Void> addProduct(@RequestBody com.example.common.entities.Product commonProduct) {
-        try {
-            // 1. generate Redis Key
-            String redisKey = "product:" + commonProduct.getSellerId() + ":" + commonProduct.getProductId();
+public ResponseEntity<Void> addProduct(@RequestBody com.example.common.entities.Product commonProduct) {
+    try {
+        // 1. Construct the Redis key in the format: "product:{sellerId}:{productId}"
+        String redisKey = "product:" + commonProduct.getSellerId() + ":" + commonProduct.getProductId();
 
-            // 2.check redis already have the key
-            Product cachedProduct = productRedisTemplate.opsForValue().get(redisKey);
+        logger.info("Received product to add: {}", commonProduct);
 
-            if (cachedProduct != null) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).build();
-            }
-
-            // 3. convert to model.Product
-            Product product = convertToInternalProduct(commonProduct);
-
-            // 4. save to mysql
-            productService.processCreateProduct(product);
-
-            // 5. save to redis
-            productRedisTemplate.opsForValue().set(redisKey, product);
-
-            return ResponseEntity.status(HttpStatus.CREATED).build();
-        } catch (Exception e) {
-            logger.error("Failed to add product: ", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+       // 2. Verify whether the product already exists in Redis
+        Product cachedProduct = productRedisTemplate.opsForValue().get(redisKey);
+        if (cachedProduct != null) {
+            logger.warn("Product already exists in Redis, key={}", redisKey);
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
+
+        // 3. Transform the data into an internal Product entity
+        Product product = convertToInternalProduct(commonProduct);
+
+        logger.info("Converted internal product: {}", product);
+
+        // 4. Invoke the service to persist the product entity
+        productService.processCreateProduct(product);
+
+        // 5. Save to Redis
+        productRedisTemplate.opsForValue().set(redisKey, product);
+        logger.info("Product saved to Redis with key={}", redisKey);
+
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    } catch (Exception e) {
+        logger.error("Failed to add product: ", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
     }
+}
 
     @PutMapping("/")
     public ResponseEntity<Void> updateProduct(@RequestBody com.example.common.entities.Product commonProduct) {
-        Product product = convertToInternalProduct(commonProduct);
         try {
+            Product product = convertToInternalProduct(commonProduct);
             productService.processProductUpdate(product);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
-            logger.error(e.toString());
-            productService.processPoisonProductUpdate(product);
+            logger.error("Failed to update product: {}", e.toString());
+            productService.processPoisonProductUpdate(convertToInternalProduct(commonProduct));
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -112,7 +117,7 @@ public class ProductController {
         try {
             productService.processPriceUpdate(update);
         } catch (Exception e) {
-            logger.error(e.toString());
+            logger.error("Failed to process price update: {}", e.toString());
             productService.processPoisonPriceUpdate(update);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
@@ -122,14 +127,24 @@ public class ProductController {
     @PatchMapping("/cleanup")
     public ResponseEntity<Void> cleanup() {
         logger.warn("Cleanup requested at {}", System.currentTimeMillis());
-        productService.cleanup();
-        return ResponseEntity.ok().build();
+        try {
+            productRepository.deleteAll();
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            logger.error("Cleanup error", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @PatchMapping("/reset")
     public ResponseEntity<Void> reset() {
-        productService.reset();
-        return ResponseEntity.ok().build();
+        try {
+            productRepository.reset();
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            logger.error("Reset error", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     private Product convertToInternalProduct(com.example.common.entities.Product commonProduct) {
@@ -146,6 +161,4 @@ public class ProductController {
         product.setVersion(commonProduct.getVersion());
         return product;
     }
-
 }
-

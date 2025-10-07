@@ -6,6 +6,11 @@ import com.example.common.entities.CartItem;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Event representing a stock confirmation.
+ * Contains timestamp, customer checkout details, confirmed items, and instance
+ * information.
+ */
 public class StockConfirmed {
 
     private LocalDateTime timestamp;
@@ -13,11 +18,19 @@ public class StockConfirmed {
     private List<CartItem> items;
     private String instanceId;
 
+    public StockConfirmed() {
+    }
 
-    public StockConfirmed() {}
-
-  
-    public StockConfirmed(LocalDateTime timestamp, CustomerCheckout customerCheckout, List<CartItem> items, String instanceId) {
+    /**
+     * Constructor with all parameters.
+     *
+     * @param timestamp        event timestamp
+     * @param customerCheckout customer checkout details
+     * @param items            list of confirmed items
+     * @param instanceId       instance ID
+     */
+    public StockConfirmed(LocalDateTime timestamp, CustomerCheckout customerCheckout, List<CartItem> items,
+            String instanceId) {
         this.timestamp = timestamp;
         this.customerCheckout = customerCheckout;
         this.items = items;

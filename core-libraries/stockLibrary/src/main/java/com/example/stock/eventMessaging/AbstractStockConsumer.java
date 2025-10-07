@@ -9,9 +9,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 抽象消费者类，用于处理库存相关的事件，不依赖具体的消息中间件，
- * 同时引入反序列化方法。函数逻辑与原始的 handleXxx(Object event) 保持不变，
- * 只是将输入改为 String payload，由子类实现具体的 JSON 反序列化。
+ * Abstract consumer class for handling stock-related events.
+ *
+ * <p>
+ * This class defines the common event-handling logic for the Stock
+ * microservice.
+ * It is framework-agnostic (no Kafka/Spring dependencies) and delegates event
+ * deserialization to its subclasses, which must implement the JSON-to-object
+ * mapping.
+ * </p>
+ *
+ * <p>
+ * Each handle method corresponds to a specific event type and delegates the
+ * processing logic to the {@link IStockService} instance provided at
+ * construction.
+ * </p>
+ *
+ * <p>
+ * <b>To implement:</b> Extend this class and provide JSON deserialization logic
+ * for each event type (e.g., using Jackson, Gson, or another parser).
+ * </p>
  */
 public abstract class AbstractStockConsumer {
 
@@ -22,14 +39,21 @@ public abstract class AbstractStockConsumer {
         this.stockService = stockService;
     }
 
-    // 抽象反序列化方法，让子类实现 JSON 到事件对象的转换
+    /** Need to be implemented */
     protected abstract ProductUpdated deserializeProductUpdated(String payload);
+
     protected abstract ReserveStock deserializeReserveStock(String payload);
+
     protected abstract PaymentConfirmed deserializePaymentConfirmed(String payload);
+
     protected abstract PaymentFailed deserializePaymentFailed(String payload);
 
     /**
-     * 处理 ProductUpdated 事件
+     * Handles a ProductUpdated event.
+     * <p>
+     * If processing fails, it attempts to call
+     * {@link IStockService#processPoisonProductUpdate(ProductUpdated)}.
+     * </p>
      */
     public void handleProductUpdate(String payload) {
         try {
@@ -37,7 +61,7 @@ public abstract class AbstractStockConsumer {
             logger.info("Handling product update event.");
             stockService.processProductUpdate(event);
         } catch (Exception e) {
-            // 如果处理出错，可考虑发送 poison 消息
+
             ProductUpdated event = deserializeProductUpdated(payload);
             logger.error("Error processing product update: {}", e.getMessage());
             stockService.processPoisonProductUpdate(event);
@@ -45,7 +69,11 @@ public abstract class AbstractStockConsumer {
     }
 
     /**
-     * 处理 ReserveStock 事件
+     * Handles a ReserveStock event.
+     * <p>
+     * If processing fails, a poison event is passed to
+     * {@link IStockService#processPoisonReserveStock(ReserveStock)}.
+     * </p>
      */
     public void handleReserveStock(String payload) {
         try {
@@ -61,7 +89,8 @@ public abstract class AbstractStockConsumer {
     }
 
     /**
-     * 处理 PaymentConfirmed 事件
+     * Handles a PaymentConfirmed event, which indicates that stock reservations
+     * should be confirmed and finalized.
      */
     public void handlePaymentConfirmed(String payload) {
         try {
@@ -71,12 +100,13 @@ public abstract class AbstractStockConsumer {
         } catch (Exception e) {
             PaymentConfirmed event = deserializePaymentConfirmed(payload);
             logger.error("Error processing payment confirmed: {}", e.getMessage());
-            // 根据需要添加 poison 或其他异常处理逻辑
+
         }
     }
 
     /**
-     * 处理 PaymentFailed 事件
+     * Handles a PaymentFailed event, which indicates that reserved stock should be
+     * released.
      */
     public void handlePaymentFailed(String payload) {
         try {

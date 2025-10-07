@@ -1,7 +1,10 @@
 package com.example.common.entities;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-
+/**
+ * Entity representing a product in the marketplace.
+ * Contains seller, product, pricing, logistics, and version information.
+ */
 public class Product {
     @JsonProperty("seller_id")
     private int sellerId;

@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 @Repository
 public class RedisOrderSellerViewRepository implements IOrderSellerViewRepository {
 
-    //修改OrderSellerView 实现Serializable 接口
+    // Modify OrderSellerView to implement the Serializable interface
 
     private static final String DASHBOARD_KEY = "sellerDashboard:";
 
@@ -37,7 +37,8 @@ public class RedisOrderSellerViewRepository implements IOrderSellerViewRepositor
     }
 
     /**
-     * 清除所有物化视图数据，即删除所有以 "sellerDashboard:" 开头的 Redis key
+     * Clears all materialized view data by deleting every Redis key
+     * starting with the prefix "sellerDashboard:".
      */
     @Override
     public void clearMaterializedView() {
@@ -48,9 +49,15 @@ public class RedisOrderSellerViewRepository implements IOrderSellerViewRepositor
     }
 
     /**
-     * 填充物化视图：从数据库加载聚合数据并保存到 Redis。
-     * 注意：这里我们使用 loadSellerDashboardsFromDB() 模拟从数据库加载数据，
-     * 在实际系统中应将此方法替换为真实的聚合查询逻辑。
+     * Populates the materialized view by loading aggregated data from the database
+     * and storing it into Redis.
+     *
+     * <p>
+     * Note: In this example, the method {@code loadSellerDashboardsFromDB()} is
+     * used to simulate database loading.
+     * In a real system, this should be replaced with actual aggregation query logic
+     * (e.g., using SQL or repository-level computation).
+     * </p>
      */
     @Override
     public void populateMaterializedView() {
@@ -63,13 +70,15 @@ public class RedisOrderSellerViewRepository implements IOrderSellerViewRepositor
     }
 
     /**
-     * 模拟方法：从数据库加载 SellerDashboard 数据。
-     * 实际场景中应使用 JDBC、JPA 或其它方式从 seller_order_summary 表中查询数据。
+     * Mock method: loads {@code SellerDashboard} data from the database.
+     *
+     * <p>
+     * In real scenarios, this should query the {@code seller_order_summary} table
+     * using JDBC, JPA, or any other data access layer to fetch actual records.
+     * </p>
      */
     private List<SellerDashboard> loadSellerDashboardsFromDB() {
-        // TODO: 实现从数据库加载 SellerDashboard 数据的逻辑
+        // TODO: Implement logic to load SellerDashboard data from the database
         return new ArrayList<>();
     }
 }
-
-

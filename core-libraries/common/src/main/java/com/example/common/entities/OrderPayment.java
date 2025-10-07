@@ -1,5 +1,8 @@
 package com.example.common.entities;
-
+/**
+ * Entity representing a payment record for an order.
+ * Includes payment type, installments, and value information.
+ */
 public class OrderPayment {
 
     private int orderId;
@@ -20,6 +23,15 @@ public class OrderPayment {
     public OrderPayment() {}
 
     
+    /**
+     * Constructor with all parameters.
+     *
+     * @param orderId order ID
+     * @param paymentSequential payment sequential number
+     * @param paymentType type of payment
+     * @param paymentInstallments number of installments
+     * @param paymentValue payment value
+     */
     public OrderPayment(int orderId, int paymentSequential, PaymentType paymentType, int paymentInstallments, float paymentValue) {
         this.orderId = orderId;
         this.paymentSequential = paymentSequential;

@@ -7,6 +7,15 @@ import com.example.customer.service.ICustomerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Abstract base consumer for handling customer-related events.
+ * 
+ * Provides common processing logic for DeliveryNotification,
+ * PaymentConfirmed, and PaymentFailed events, delegating
+ * business logic to {@link ICustomerService}.
+ *
+ * Subclasses must implement the deserialization logic.
+ */
 public abstract class AbstractCustomerConsumer {
 
     private static final Logger logger = LoggerFactory.getLogger(AbstractCustomerConsumer.class);
@@ -18,7 +27,9 @@ public abstract class AbstractCustomerConsumer {
     }
 
     protected abstract DeliveryNotification deserializeDeliveryNotification(String payload);
+
     protected abstract PaymentConfirmed deserializePaymentConfirmed(String payload);
+
     protected abstract PaymentFailed deserializePaymentFailed(String payload);
 
     public void handleDeliveryNotification(String payload) {
