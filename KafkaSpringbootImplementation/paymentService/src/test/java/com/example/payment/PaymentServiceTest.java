@@ -28,11 +28,15 @@ public class PaymentServiceTest {
     @Autowired
     private IPaymentRepository paymentRepository;
 
+    @Autowired
+    private com.example.payment.repository.RedisPaymentAuditLogRepository auditLogRepository;
+
     private InvoiceIssued invoiceIssued;
 
     @BeforeEach
     public void setup() {
         paymentRepository.deleteAll();
+        auditLogRepository.deleteAll();
 
         CustomerCheckout customer = new CustomerCheckout();
         customer.setCustomerId(12345);
@@ -78,6 +82,19 @@ public class PaymentServiceTest {
         OrderPayment payment = payments.get(0);
         assertNotNull(payment.getCreatedAt());
         assertTrue(payment.getCreatedAt().isBefore(LocalDateTime.now().plusSeconds(1)));
+    }
+
+    @Test
+    public void testPaymentIsAuditLogged() {
+        paymentService.processPayment(invoiceIssued);
+
+        List<com.example.common.audit.AuditRecord> records = auditLogRepository.findByOrder(
+                invoiceIssued.getCustomer().getCustomerId(), invoiceIssued.getOrderId());
+        assertEquals(1, records.size());
+        assertEquals("PAYMENT_PROCESSED", records.get(0).getTrigger());
+        assertTrue(records.get(0).getPayload().containsKey("payments"));
+        assertTrue(records.get(0).getPayload().containsKey("paymentCards"));
+        assertTrue(records.get(0).getPayload().containsKey("outcome"));
     }
 
     @Test

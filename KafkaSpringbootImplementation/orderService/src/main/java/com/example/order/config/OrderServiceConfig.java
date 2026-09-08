@@ -17,6 +17,7 @@ public class OrderServiceConfig {
             RedisOrderHistoryRepository orderHistoryRepository,
             RedisCustomerOrderRepository customerOrderRepository,
             RedisProcessedCheckoutRepository processedCheckoutRepository,
+            RedisOrderAuditLogRepository auditLogRepository,
             IEventPublisher eventPublisher) {
         return new OrderServiceCore(
                 orderRepository,
@@ -24,6 +25,7 @@ public class OrderServiceConfig {
                 orderHistoryRepository,
                 customerOrderRepository,
                 processedCheckoutRepository,
+                auditLogRepository,
                 eventPublisher
         );
     }

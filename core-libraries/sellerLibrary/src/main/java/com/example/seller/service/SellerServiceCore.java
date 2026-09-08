@@ -14,6 +14,8 @@ import com.example.seller.dto.SellerDashboard;
 import com.example.seller.model.OrderEntry;
 import com.example.seller.model.OrderEntryId;
 import com.example.seller.model.OrderSellerView;
+import com.example.common.audit.AuditRecord;
+import com.example.common.audit.IAuditLogRepository;
 import com.example.common.messaging.PredecessorNotReadyException;
 import com.example.seller.repository.IOrderEntryRepository;
 import com.example.seller.repository.ISellerRepository;
@@ -50,18 +52,21 @@ public class SellerServiceCore implements ISellerService {
     private final IOrderEntryRepository orderEntryRepository;
     private final IOrderSellerViewRepository orderSellerViewRepository;
     private final IMaterializedViewService materializedViewService;
+    private final IAuditLogRepository auditLogRepository;
     // private final SellerConfig config;
     private final Logger logger = LoggerFactory.getLogger(SellerServiceCore.class);
 
     public SellerServiceCore(ISellerRepository sellerRepository,
             IOrderEntryRepository orderEntryRepository,
             IOrderSellerViewRepository orderSellerViewRepository,
-            IMaterializedViewService materializedViewService) {
+            IMaterializedViewService materializedViewService,
+            IAuditLogRepository auditLogRepository) {
         // SellerConfig config
         this.sellerRepository = sellerRepository;
         this.orderEntryRepository = orderEntryRepository;
         this.orderSellerViewRepository = orderSellerViewRepository;
         this.materializedViewService = materializedViewService;
+        this.auditLogRepository = auditLogRepository;
         // this.config = config;
     }
 
@@ -135,6 +140,13 @@ public class SellerServiceCore implements ISellerService {
         }
         orderEntryRepository.saveAll(entries);
         logger.info("Order entries saved successfully for Order ID: {}", shipmentNotification.getOrderId());
+
+        if (shipmentNotification.getStatus() == ShipmentStatus.CONCLUDED) {
+            auditLogRepository.append(new AuditRecord("seller", "SHIPMENT_CONCLUDED",
+                    shipmentNotification.getCustomerId(), shipmentNotification.getOrderId())
+                    .with("orderEntries", orderEntryRepository.findByCustomerIdAndOrderId(
+                            shipmentNotification.getCustomerId(), shipmentNotification.getOrderId())));
+        }
     }
 
     /**
@@ -268,10 +280,12 @@ public class SellerServiceCore implements ISellerService {
     public void cleanup() {
         sellerRepository.deleteAll();
         orderEntryRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 
     @Override
     public void reset() {
         orderEntryRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 }

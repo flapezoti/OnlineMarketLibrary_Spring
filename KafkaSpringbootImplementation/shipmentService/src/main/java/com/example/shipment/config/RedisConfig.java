@@ -1,5 +1,6 @@
 package com.example.shipment.config;
 
+import com.example.common.audit.AuditRecord;
 import com.example.shipment.model.Shipment;
 import com.example.shipment.model.Package;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
@@ -53,6 +54,21 @@ public class RedisConfig {
 
         Jackson2JsonRedisSerializer<Package> serializer =
                 new Jackson2JsonRedisSerializer<>(objectMapper(), Package.class);
+
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(serializer);
+
+        template.afterPropertiesSet();
+        return template;
+    }
+
+    @Bean
+    public RedisTemplate<String, AuditRecord> auditLogRedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, AuditRecord> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+
+        Jackson2JsonRedisSerializer<AuditRecord> serializer =
+                new Jackson2JsonRedisSerializer<>(objectMapper(), AuditRecord.class);
 
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(serializer);

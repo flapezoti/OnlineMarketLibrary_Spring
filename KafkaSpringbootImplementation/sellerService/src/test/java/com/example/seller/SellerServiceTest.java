@@ -28,6 +28,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 public class SellerServiceTest {
@@ -38,9 +39,13 @@ public class SellerServiceTest {
     @Autowired
     private IOrderEntryRepository orderEntryRepository;
 
+    @Autowired
+    private com.example.seller.repository.RedisSellerAuditLogRepository auditLogRepository;
+
     @BeforeEach
     public void setUp() {
         orderEntryRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 
     private void seedEntry(int customerId, int orderId, int sellerId, int productId, OrderStatus status) {
@@ -117,6 +122,23 @@ public class SellerServiceTest {
         List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(1, 1001);
         assertEquals(1, entries.size());
         assertEquals(OrderStatus.READY_FOR_SHIPMENT, entries.get(0).getOrderStatus());
+    }
+
+    @Test
+    public void testShipmentConcludedIsAuditLogged() {
+        seedEntry(1, 1001, 1, 2001, OrderStatus.IN_TRANSIT);
+
+        ShipmentNotification sn = new ShipmentNotification();
+        sn.setOrderId(1001);
+        sn.setCustomerId(1);
+        sn.setStatus(ShipmentStatus.CONCLUDED);
+
+        sellerService.processShipmentNotification(sn);
+
+        List<com.example.common.audit.AuditRecord> records = auditLogRepository.findByOrder(1, 1001);
+        assertEquals(1, records.size());
+        assertEquals("SHIPMENT_CONCLUDED", records.get(0).getTrigger());
+        assertTrue(records.get(0).getPayload().containsKey("orderEntries"));
     }
 
     @Test

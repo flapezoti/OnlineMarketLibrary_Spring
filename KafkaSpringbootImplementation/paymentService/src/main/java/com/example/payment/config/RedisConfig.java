@@ -1,5 +1,6 @@
 package com.example.payment.config;
 
+import com.example.common.audit.AuditRecord;
 import com.example.payment.model.OrderPayment;
 import com.example.payment.model.OrderPaymentCard;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
@@ -50,5 +51,10 @@ public class RedisConfig {
     @Bean
     public RedisTemplate<String, OrderPaymentCard> orderPaymentCardRedisTemplate(RedisConnectionFactory factory) {
         return createTemplate(factory, OrderPaymentCard.class);
+    }
+
+    @Bean
+    public RedisTemplate<String, AuditRecord> auditLogRedisTemplate(RedisConnectionFactory factory) {
+        return createTemplate(factory, AuditRecord.class);
     }
 }

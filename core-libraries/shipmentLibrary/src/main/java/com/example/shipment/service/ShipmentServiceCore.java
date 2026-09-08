@@ -11,6 +11,8 @@ import com.example.common.driver.TransactionMark;
 import com.example.common.driver.TransactionType;
 //import com.example.shipment.config.IShipmentConfig;
 import com.example.common.messaging.EventKeys;
+import com.example.common.audit.AuditRecord;
+import com.example.common.audit.IAuditLogRepository;
 import com.example.common.messaging.IEventPublisher;
 import com.example.shipment.model.Package;
 import com.example.shipment.model.PackageId;
@@ -64,15 +66,18 @@ public class ShipmentServiceCore implements IShipmentService {
 
     private final IShipmentRepository shipmentRepository;
     private final IPackageRepository packageRepository;
+    private final IAuditLogRepository auditLogRepository;
     private final IEventPublisher eventPublisher;
     // private final IShipmentConfig config;
 
     public ShipmentServiceCore(IShipmentRepository shipmentRepository,
             IPackageRepository packageRepository,
+            IAuditLogRepository auditLogRepository,
             IEventPublisher eventPublisher) {
         // IShipmentConfig config
         this.shipmentRepository = shipmentRepository;
         this.packageRepository = packageRepository;
+        this.auditLogRepository = auditLogRepository;
         this.eventPublisher = eventPublisher;
         // this.config = config;
     }
@@ -266,6 +271,12 @@ public class ShipmentServiceCore implements IShipmentService {
                     ShipmentStatus.CONCLUDED);
             eventPublisher.publishEvent("shipment-notification-topic",
                     EventKeys.order(shipment.getCustomerId(), shipment.getOrderId()), notification);
+
+            auditLogRepository.append(new AuditRecord("shipment", "SHIPMENT_CONCLUDED",
+                    shipment.getCustomerId(), shipment.getOrderId())
+                    .with("shipment", shipment)
+                    .with("packages", packageRepository.findAllByOrderIdAndCustomerId(
+                            shipment.getCustomerId(), shipment.getOrderId())));
         }
     }
 
@@ -277,5 +288,6 @@ public class ShipmentServiceCore implements IShipmentService {
      */
     public void cleanup() {
         shipmentRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 }

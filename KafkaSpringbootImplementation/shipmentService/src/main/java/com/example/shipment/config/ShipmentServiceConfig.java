@@ -2,6 +2,7 @@ package com.example.shipment.config;
 
 import com.example.shipment.repository.IPackageRepository;
 import com.example.shipment.repository.IShipmentRepository;
+import com.example.shipment.repository.RedisShipmentAuditLogRepository;
 import com.example.shipment.kafka.ShipmentKafkaProducer;
 import com.example.shipment.service.IShipmentService;
 import com.example.shipment.service.ShipmentServiceCore;
@@ -14,8 +15,10 @@ public class ShipmentServiceConfig {
     @Bean
     public IShipmentService shipmentService(IShipmentRepository shipmentRepository,
                                            IPackageRepository packageRepository,
+                                           RedisShipmentAuditLogRepository auditLogRepository,
                                            ShipmentKafkaProducer shipmentKafkaProducer) {
-        return new ShipmentServiceCore(shipmentRepository, packageRepository,shipmentKafkaProducer);
+        return new ShipmentServiceCore(shipmentRepository, packageRepository, auditLogRepository,
+                shipmentKafkaProducer);
     }
 }
 

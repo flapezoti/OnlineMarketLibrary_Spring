@@ -1,5 +1,6 @@
 package com.example.seller.config;
 
+import com.example.common.audit.AuditRecord;
 import com.example.seller.dto.SellerDashboard;
 import com.example.seller.model.OrderEntry;
 import com.example.seller.model.OrderSellerView;
@@ -76,6 +77,20 @@ public class SellerRedisConfig {
 
         Jackson2JsonRedisSerializer<SellerDashboard> serializer = new Jackson2JsonRedisSerializer<>(objectMapper,
                 SellerDashboard.class);
+
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(serializer);
+
+        return template;
+    }
+
+    @Bean
+    public RedisTemplate<String, AuditRecord> auditLogRedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, AuditRecord> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+
+        Jackson2JsonRedisSerializer<AuditRecord> serializer = new Jackson2JsonRedisSerializer<>(objectMapper,
+                AuditRecord.class);
 
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(serializer);

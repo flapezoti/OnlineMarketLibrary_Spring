@@ -13,6 +13,8 @@ import com.example.order.repository.IOrderHistoryRepository;
 import com.example.order.repository.IOrderItemRepository;
 import com.example.order.repository.IOrderRepository;
 import com.example.order.repository.IProcessedCheckoutRepository;
+import com.example.common.audit.AuditRecord;
+import com.example.common.audit.IAuditLogRepository;
 import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
 import com.example.common.messaging.PredecessorNotReadyException;
@@ -73,6 +75,7 @@ public class OrderServiceCore implements IOrderService {
     private final IOrderHistoryRepository orderHistoryRepository;
     private final ICustomerOrderRepository customerOrderRepository;
     private final IProcessedCheckoutRepository processedCheckoutRepository;
+    private final IAuditLogRepository auditLogRepository;
     private final IEventPublisher eventPublisher;
 
     public OrderServiceCore(IOrderRepository orderRepository,
@@ -80,13 +83,24 @@ public class OrderServiceCore implements IOrderService {
             IOrderHistoryRepository orderHistoryRepository,
             ICustomerOrderRepository customerOrderRepository,
             IProcessedCheckoutRepository processedCheckoutRepository,
+            IAuditLogRepository auditLogRepository,
             IEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.orderHistoryRepository = orderHistoryRepository;
         this.customerOrderRepository = customerOrderRepository;
         this.processedCheckoutRepository = processedCheckoutRepository;
+        this.auditLogRepository = auditLogRepository;
         this.eventPublisher = eventPublisher;
+    }
+
+    /** Durable audit snapshot of an order and its lines/history at a key event. */
+    private void logOrderSnapshot(String trigger, int customerId, int orderId) {
+        orderRepository.findByCustomerIdAndOrderId(customerId, orderId).ifPresent(order ->
+                auditLogRepository.append(new AuditRecord("order", trigger, customerId, orderId)
+                        .with("order", order)
+                        .with("orderItems", orderItemRepository.findByCustomerIdAndOrderId(customerId, orderId))
+                        .with("orderHistory", orderHistoryRepository.findByCustomerIdAndOrderId(customerId, orderId))));
     }
 
     @Override
@@ -291,6 +305,8 @@ public class OrderServiceCore implements IOrderService {
         orderHistory.setOrder(order);
         orderHistoryRepository.save(orderHistory);
 
+        logOrderSnapshot("PAYMENT_FAILED",
+                paymentFailed.getCustomer().getCustomerId(), paymentFailed.getOrderId());
     }
 
     @Override
@@ -326,6 +342,11 @@ public class OrderServiceCore implements IOrderService {
 
         orderRepository.save(order);
         orderHistoryRepository.save(orderHistory);
+
+        if (shipmentNotification.getStatus() == ShipmentStatus.CONCLUDED) {
+            logOrderSnapshot("SHIPMENT_CONCLUDED",
+                    shipmentNotification.getCustomerId(), shipmentNotification.getOrderId());
+        }
     }
 
     @Override
@@ -335,6 +356,7 @@ public class OrderServiceCore implements IOrderService {
         orderRepository.deleteAll();
         customerOrderRepository.deleteAll();
         processedCheckoutRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 
     @Override

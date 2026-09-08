@@ -53,6 +53,8 @@ public class OrderServiceTest {
     private RedisCustomerOrderRepository customerOrderRepository;
     @Autowired
     private RedisProcessedCheckoutRepository processedCheckoutRepository;
+    @Autowired
+    private com.example.order.repository.RedisOrderAuditLogRepository auditLogRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -63,6 +65,7 @@ public class OrderServiceTest {
         orderHOrderRepository.deleteAll();
         customerOrderRepository.deleteAll();
         processedCheckoutRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 
     @Test
@@ -268,6 +271,35 @@ public class OrderServiceTest {
                 .filter(h -> h.getStatus() == OrderStatus.PAYMENT_PROCESSED)
                 .count();
         assertEquals(1, paymentProcessedRows);
+    }
+
+    // ---- audit logging ----------------------------------------------------------------
+
+    @Test
+    public void testPaymentFailedIsAuditLogged() {
+        Order order = new Order();
+        order.setId(new OrderId(1001, 1));
+        order.setStatus(OrderStatus.CREATED);
+        order.setInvoiceNumber("INV-AUDIT-1");
+        order.setPurchaseDate(LocalDateTime.now());
+        order.setCreatedAt(LocalDateTime.now());
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+
+        CustomerCheckout cc = new CustomerCheckout();
+        cc.setCustomerId(1001);
+        PaymentFailed pf = new PaymentFailed();
+        pf.setCustomer(cc);
+        pf.setOrderId(1);
+
+        orderService.processPaymentFailed(pf);
+
+        List<com.example.common.audit.AuditRecord> records = auditLogRepository.findByOrder(1001, 1);
+        assertEquals(1, records.size());
+        assertEquals("PAYMENT_FAILED", records.get(0).getTrigger());
+        assertTrue(records.get(0).getPayload().containsKey("order"));
+        assertTrue(records.get(0).getPayload().containsKey("orderItems"));
+        assertTrue(records.get(0).getPayload().containsKey("orderHistory"));
     }
 
     // ---- no duplicate checkouts ---------------------------------------------------------

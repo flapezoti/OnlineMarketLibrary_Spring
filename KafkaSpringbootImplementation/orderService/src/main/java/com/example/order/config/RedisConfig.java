@@ -1,5 +1,6 @@
 package com.example.order.config;
 
+import com.example.common.audit.AuditRecord;
 import com.example.order.model.Order;
 import com.example.order.model.OrderItem;
 import com.example.order.model.OrderHistory;
@@ -60,5 +61,10 @@ public class RedisConfig {
     @Bean
     public RedisTemplate<String, CustomerOrder> customerOrderRedisTemplate(RedisConnectionFactory factory) {
         return createTemplate(factory, CustomerOrder.class);
+    }
+
+    @Bean
+    public RedisTemplate<String, AuditRecord> auditLogRedisTemplate(RedisConnectionFactory factory) {
+        return createTemplate(factory, AuditRecord.class);
     }
 }
