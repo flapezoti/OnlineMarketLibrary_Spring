@@ -8,8 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.cart.model.Cart;
 import com.example.cart.model.CartItem;
 import com.example.cart.model.CartItemId;
+import com.example.cart.model.ProductReplica;
 import com.example.cart.repository.RedisCartItemRepository;
 import com.example.cart.repository.RedisCartRepository;
+import com.example.cart.repository.RedisProductReplicaRepository;
 import com.example.common.entities.CartStatus;
 import com.example.common.requests.CustomerCheckout;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,18 +38,23 @@ public class CartControllerTest {
     private RedisCartItemRepository cartItemRepository;
 
     @Autowired
+    private RedisProductReplicaRepository productReplicaRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @BeforeEach
     public void setUp() {
         cartItemRepository.deleteAll();
         cartRepository.deleteAll();
+        productReplicaRepository.deleteAll();
     }
 
     @AfterEach
     public void tearDown() {
         cartItemRepository.deleteAll();
         cartRepository.deleteAll();
+        productReplicaRepository.deleteAll();
     }
 
     @Test
@@ -82,6 +89,15 @@ public class CartControllerTest {
         item1.setQuantity(2);
         item1.setCart(cart);
         cartItemRepository.saveCartItem(item1);
+
+        ProductReplica replica = new ProductReplica();
+        replica.setSellerId(1);
+        replica.setProductId(101);
+        replica.setName("Product A");
+        replica.setPrice(50.0f);
+        replica.setVersion("1");
+        replica.setActive(true);
+        productReplicaRepository.saveProductReplica(replica);
 
         CustomerCheckout checkout = new CustomerCheckout();
         checkout.setCustomerId(2);
