@@ -1,0 +1,13 @@
+Claude.md
+
+# Maven build output
+target/
+
+# Runtime logs and pid files (start_all_services.sh)
+logs/
+
+# Redis snapshot files (Redis runs in Docker, data lives in a named volume)
+*.rdb
+
+# OS / editor cruft
+.DS_Store

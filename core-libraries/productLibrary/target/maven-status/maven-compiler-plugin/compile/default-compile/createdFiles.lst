@@ -1,6 +1,0 @@
-com/example/product/model/ProductId.class
-com/example/product/service/IProductService.class
-com/example/product/model/Product.class
-com/example/product/eventMessaging/AbstractProductConsumer.class
-com/example/product/service/ProductServiceCore.class
-com/example/product/repository/IProductRepository.class
