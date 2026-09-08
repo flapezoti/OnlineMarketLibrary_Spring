@@ -16,12 +16,14 @@ public class OrderServiceConfig {
             RedisOrderItemRepository orderItemRepository,
             RedisOrderHistoryRepository orderHistoryRepository,
             RedisCustomerOrderRepository customerOrderRepository,
+            RedisProcessedCheckoutRepository processedCheckoutRepository,
             IEventPublisher eventPublisher) {
         return new OrderServiceCore(
                 orderRepository,
                 orderItemRepository,
                 orderHistoryRepository,
                 customerOrderRepository,
+                processedCheckoutRepository,
                 eventPublisher
         );
     }

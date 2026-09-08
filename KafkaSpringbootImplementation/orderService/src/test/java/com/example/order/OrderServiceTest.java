@@ -13,6 +13,7 @@ import com.example.order.model.OrderId;
 import com.example.order.repository.RedisCustomerOrderRepository;
 import com.example.order.repository.RedisOrderHistoryRepository;
 import com.example.order.repository.RedisOrderRepository;
+import com.example.order.repository.RedisProcessedCheckoutRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +45,8 @@ public class OrderServiceTest {
     private RedisOrderHistoryRepository orderHOrderRepository;
     @Autowired
     private RedisCustomerOrderRepository customerOrderRepository;
+    @Autowired
+    private RedisProcessedCheckoutRepository processedCheckoutRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -53,6 +56,7 @@ public class OrderServiceTest {
         orderRepository.deleteAll();
         orderHOrderRepository.deleteAll();
         customerOrderRepository.deleteAll();
+        processedCheckoutRepository.deleteAll();
     }
 
     @Test
@@ -222,5 +226,62 @@ public class OrderServiceTest {
         Order updatedOrder = orderRepository.findByCustomerIdAndOrderId(1001, 1).orElse(null);
         assertNotNull(updatedOrder, "Order should exist in the database");
         assertEquals(OrderStatus.DELIVERED, updatedOrder.getStatus(), "Order status should be updated to DELIVERED");
+    }
+
+    // ---- no duplicate checkouts ---------------------------------------------------------
+
+    @Test
+    public void testDuplicateStockConfirmedCreatesOneOrder() throws Exception {
+        int customerId = 9001;
+        String payload = objectMapper.writeValueAsString(buildStockConfirmed(customerId, "dup-instance-1"));
+
+        kafkaTemplate.send("stock-confirmed-topic", payload);
+        TimeUnit.MILLISECONDS.sleep(300);
+        kafkaTemplate.send("stock-confirmed-topic", payload); // redelivery of the same checkout
+        TimeUnit.MILLISECONDS.sleep(300);
+
+        List<Order> orders = orderRepository.findByCustomerId(customerId);
+        assertEquals(1, orders.size(), "a redelivered StockConfirmed must not create a second order");
+        assertEquals(1, customerOrderRepository.findByCustomerId(customerId).getNextOrderId(),
+                "nextOrderId must not be incremented twice for one checkout");
+    }
+
+    @Test
+    public void testStockConfirmedWithNoInstanceIdIsNotDeduped() throws Exception {
+        int customerId = 9002;
+        String payload = objectMapper.writeValueAsString(buildStockConfirmed(customerId, null));
+
+        kafkaTemplate.send("stock-confirmed-topic", payload);
+        TimeUnit.MILLISECONDS.sleep(300);
+        kafkaTemplate.send("stock-confirmed-topic", payload);
+        TimeUnit.MILLISECONDS.sleep(300);
+
+        // With no instanceId there is nothing to key the guard on, so both events are processed.
+        assertEquals(2, orderRepository.findByCustomerId(customerId).size(),
+                "without an instanceId the duplicate guard does not apply");
+    }
+
+    private StockConfirmed buildStockConfirmed(int customerId, String instanceId) {
+        CustomerCheckout checkout = new CustomerCheckout();
+        checkout.setCustomerId(customerId);
+        checkout.setInstanceId(instanceId);
+
+        CartItem item = new CartItem();
+        item.setProductId(2001);
+        item.setSellerId(3001);
+        item.setQuantity(2);
+        item.setUnitPrice(50.0f);
+        item.setFreightValue(5.0f);
+        item.setVoucher(0.0f);
+
+        List<CartItem> items = new ArrayList<>();
+        items.add(item);
+
+        StockConfirmed sc = new StockConfirmed();
+        sc.setTimestamp(LocalDateTime.now());
+        sc.setCustomerCheckout(checkout);
+        sc.setItems(items);
+        sc.setInstanceId(instanceId);
+        return sc;
     }
 }
