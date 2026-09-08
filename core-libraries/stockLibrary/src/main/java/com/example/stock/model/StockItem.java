@@ -35,7 +35,7 @@ public class StockItem {
     private String version;
 
     @Column(name = "active")
-    private boolean active;
+    private boolean active = true;
 
 
     public StockItem() {}
@@ -46,7 +46,6 @@ public class StockItem {
         this.qtyAvailable = qtyAvailable;
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
-        this.active = true;
     }
 
     // Getters and Setters

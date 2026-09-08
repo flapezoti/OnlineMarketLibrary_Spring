@@ -13,6 +13,8 @@ public interface IStockService {
 
     void processProductUpdate(ProductUpdated productUpdate);
 
+    void processProductDelete(ProductDelete productDelete);
+
     void createStockItem(StockItem stockItem);
 
     void increaseStock(IncreaseStock increaseStock);

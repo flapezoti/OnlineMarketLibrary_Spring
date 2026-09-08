@@ -1,5 +1,6 @@
 package com.example.stock.kafka;
 
+import com.example.common.events.ProductDelete;
 import com.example.common.events.ProductUpdated;
 import com.example.common.events.ReserveStock;
 import com.example.common.events.PaymentConfirmed;
@@ -30,6 +31,15 @@ public class JsonStockConsumer extends AbstractStockConsumer {
             return mapper.readValue(payload, ProductUpdated.class);
         } catch (IOException e) {
             throw new RuntimeException("JSON deserialization failed for ProductUpdated", e);
+        }
+    }
+
+    @Override
+    protected ProductDelete deserializeProductDelete(String payload) {
+        try {
+            return mapper.readValue(payload, ProductDelete.class);
+        } catch (IOException e) {
+            throw new RuntimeException("JSON deserialization failed for ProductDelete", e);
         }
     }
 

@@ -1,6 +1,7 @@
 package com.example.product.service;
 
 import com.example.common.events.PriceUpdate;
+import com.example.common.events.ProductDelete;
 import com.example.common.events.ProductUpdated;
 import com.example.product.model.Product;
 import com.example.product.model.ProductId;
@@ -111,6 +112,27 @@ public class ProductServiceCore implements IProductService {
     @Override
     public void processPoisonProductUpdate(Product product) {
         eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", product);
+    }
+
+    /**
+     * Disables a product and notifies Stock so it stops allowing reservations of it.
+     * The product row is kept, only its status changes.
+     * <p>
+     * Eventual consistency only: if the emitted event is lost, Stock is never told and
+     * there is no reconciliation to repair it.
+     */
+    @Override
+    public void processDeleteProduct(int sellerId, int productId, String instanceId) {
+        Product product = productRepository
+                .findById(new ProductId(sellerId, productId))
+                .orElseThrow(() -> new RuntimeException("Product not found: " + sellerId + "-" + productId));
+
+        product.setStatus("DELETED");
+        productRepository.saveProduct(product);
+
+        eventPublisher.publishEvent("product-delete-topic",
+                new ProductDelete(sellerId, productId, product.getVersion(), instanceId));
+        logger.info("Product {}-{} disabled; ProductDelete event sent", sellerId, productId);
     }
 
     /**
