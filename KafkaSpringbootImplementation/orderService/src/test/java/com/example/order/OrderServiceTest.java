@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class OrderServiceTest {
 
     @Autowired
-    private KafkaTemplate<String, Object> kafkaTemplate;
+    private KafkaTemplate<String, String> kafkaTemplate;
 
     @Autowired
     private RedisOrderRepository orderRepository;

@@ -12,6 +12,7 @@ package com.example.seller;// package com.example.seller;
  import com.example.seller.model.OrderEntry;
  import com.example.seller.model.OrderEntryId;
  import com.example.seller.repository.IOrderEntryRepository;
+ import com.fasterxml.jackson.databind.ObjectMapper;
 
  import org.junit.jupiter.api.BeforeEach;
  import org.junit.jupiter.api.Test;
@@ -45,7 +46,10 @@ package com.example.seller;// package com.example.seller;
  public class SellerServiceTest {
 
      @Autowired
-     private KafkaTemplate<String, Object> kafkaTemplate;
+     private KafkaTemplate<String, String> kafkaTemplate;
+
+     @Autowired
+     private ObjectMapper objectMapper;
 
      @Autowired
      private IOrderEntryRepository orderEntryRepository;
@@ -57,7 +61,7 @@ package com.example.seller;// package com.example.seller;
      }
 
      @Test
-     public void testProcessPaymentFailed() throws InterruptedException {
+     public void testProcessPaymentFailed() throws Exception {
          // Step 1: Initialize CustomerCheckout and create initial OrderEntry with a
          // non-failed status
          CustomerCheckout customerCheckout = new CustomerCheckout();
@@ -105,7 +109,7 @@ package com.example.seller;// package com.example.seller;
          // Set the instance ID
          paymentFailed.setInstanceId("test-instance-id");
 
-         kafkaTemplate.send("payment-failed-topic", paymentFailed);
+         kafkaTemplate.send("payment-failed-topic", objectMapper.writeValueAsString(paymentFailed));
          TimeUnit.MILLISECONDS.sleep(500); // Wait for the event to process
 
          // Step 3: Retrieve and verify that OrderEntry status is updated to
@@ -119,7 +123,7 @@ package com.example.seller;// package com.example.seller;
      }
 
      @Test
-     public void testProcessDeliveryNotification() throws InterruptedException {
+     public void testProcessDeliveryNotification() throws Exception {
          CustomerCheckout customerCheckout = new CustomerCheckout();
          customerCheckout.setCustomerId(1);
 
@@ -143,7 +147,7 @@ package com.example.seller;// package com.example.seller;
          deliveryNotification.setProductId(2001);
          deliveryNotification.setStatus(PackageStatus.DELIVERED);
 
-         kafkaTemplate.send("delivery-notification-topic", deliveryNotification);
+         kafkaTemplate.send("delivery-notification-topic", objectMapper.writeValueAsString(deliveryNotification));
          TimeUnit.MILLISECONDS.sleep(500);
 
          OrderEntryId entryId = new OrderEntryId(
@@ -159,7 +163,7 @@ package com.example.seller;// package com.example.seller;
      }
 
      @Test
-     public void testProcessInvoiceIssued() throws InterruptedException {
+     public void testProcessInvoiceIssued() throws Exception {
          // Setup CustomerCheckout data
          CustomerCheckout customerCheckout = new CustomerCheckout();
          customerCheckout.setCustomerId(1);
@@ -207,7 +211,7 @@ package com.example.seller;// package com.example.seller;
          initialEntry.setOrderStatus(OrderStatus.INVOICED); // Initial status
          orderEntryRepository.save(initialEntry);
 
-         kafkaTemplate.send("invoice-issued-topic", invoiceIssued);
+         kafkaTemplate.send("invoice-issued-topic", objectMapper.writeValueAsString(invoiceIssued));
          TimeUnit.MILLISECONDS.sleep(100);
 
          // Validate OrderEntry creation
@@ -220,7 +224,7 @@ package com.example.seller;// package com.example.seller;
      }
 
      @Test
-     public void testProcessShipmentNotification() throws InterruptedException {
+     public void testProcessShipmentNotification() throws Exception {
          CustomerCheckout customerCheckout = new CustomerCheckout();
          customerCheckout.setCustomerId(1);
 
@@ -240,7 +244,7 @@ package com.example.seller;// package com.example.seller;
          shipmentNotification.setCustomerId(1);
          shipmentNotification.setStatus(ShipmentStatus.APPROVED);
 
-         kafkaTemplate.send("shipment-notification-topic", shipmentNotification);
+         kafkaTemplate.send("shipment-notification-topic", objectMapper.writeValueAsString(shipmentNotification));
          kafkaTemplate.flush();                       // ★ 立刻把数据刷到 broker
          TimeUnit.MILLISECONDS.sleep(500);
 

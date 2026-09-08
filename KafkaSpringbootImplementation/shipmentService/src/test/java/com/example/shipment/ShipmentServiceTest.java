@@ -13,6 +13,7 @@ package com.example.shipment;// package com.example.shipment;
  import com.example.common.entities.OrderItem;
  import com.example.common.entities.PackageStatus;
  import com.example.common.entities.ShipmentStatus;
+ import com.fasterxml.jackson.databind.ObjectMapper;
  import org.junit.jupiter.api.BeforeEach;
  import org.junit.jupiter.api.Test;
  import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +40,10 @@ package com.example.shipment;// package com.example.shipment;
      private IPackageRepository packageRepository;
 
      @Autowired
-     private KafkaTemplate<String, Object> kafkaTemplate;
+     private KafkaTemplate<String, String> kafkaTemplate;
+
+     @Autowired
+     private ObjectMapper objectMapper;
 
      @BeforeEach
      public void setup() {
@@ -48,7 +52,7 @@ package com.example.shipment;// package com.example.shipment;
      }
 
      @Test
-     public void testProcessShipment() throws InterruptedException {
+     public void testProcessShipment() throws Exception {
          // 创建一个 CustomerCheckout 对象
          CustomerCheckout customerCheckout = new CustomerCheckout();
          customerCheckout.setCustomerId(1); // 设置 customerId
@@ -86,7 +90,7 @@ package com.example.shipment;// package com.example.shipment;
 
          // 处理发货事件
          shipmentService.processShipment(paymentConfirmed);
-         kafkaTemplate.send("payment-confirmed-topic", paymentConfirmed);
+         kafkaTemplate.send("payment-confirmed-topic", objectMapper.writeValueAsString(paymentConfirmed));
          Thread.sleep(100);
 
          // 验证数据库中的 Shipment 数据是否正确插入
