@@ -22,8 +22,10 @@ import com.example.seller.repository.IOrderSellerViewRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Core implementation of {@link ISellerService}.
@@ -209,22 +211,57 @@ public class SellerServiceCore implements ISellerService {
         logger.info("PaymentFailed processing completed.");
     }
 
+    private static final Set<OrderStatus> ONGOING_STATUSES = Set.of(
+            OrderStatus.INVOICED,
+            OrderStatus.PAYMENT_PROCESSED,
+            OrderStatus.READY_FOR_SHIPMENT,
+            OrderStatus.IN_TRANSIT);
+
     /**
-     * Queries an aggregated dashboard view for a seller, including both
-     * high-level summary data and detailed order entries.
+     * Queries the seller dashboard: the discriminated list of order entries plus the
+     * aggregate over the seller's ongoing orders.
+     * <p>
+     * Both halves are computed from a single read of {@code order_entry}, so they always
+     * reflect the same snapshot of the application state.
      */
     @Override
     public SellerDashboard queryDashboard(int sellerId) {
         try {
-            OrderSellerView sellerView = materializedViewService.getSellerView(sellerId);
-            logger.info("dashboard seller view: {}", sellerView);
             List<OrderEntry> orderEntries = orderEntryRepository.findAllBySellerId(sellerId);
-            logger.info("dashboard order entries: {}", orderEntries);
+            OrderSellerView sellerView = aggregateOngoing(sellerId, orderEntries);
             return new SellerDashboard(sellerView, orderEntries);
         } catch (Exception e) {
             logger.error("Error querying dashboard for sellerId {}: {}", sellerId, e.getMessage(), e);
             throw new RuntimeException("Failed to query seller dashboard", e);
         }
+    }
+
+    /**
+     * Folds the seller's <em>ongoing</em> order entries (not concluded, not payment-failed)
+     * into the aggregate the dashboard exposes.
+     * <p>
+     * Note: {@code totalItems} / {@code totalIncentive} are summed as stored on the entry;
+     * {@code processInvoiceIssued} does not currently populate them, so they stay 0 until
+     * that is addressed.
+     */
+    private OrderSellerView aggregateOngoing(int sellerId, List<OrderEntry> entries) {
+        OrderSellerView view = new OrderSellerView();
+        view.setSellerId(sellerId);
+        Set<Integer> orderIds = new HashSet<>();
+        for (OrderEntry e : entries) {
+            if (!ONGOING_STATUSES.contains(e.getOrderStatus())) {
+                continue;
+            }
+            orderIds.add(e.getOrderId());
+            view.setCountItems(view.getCountItems() + e.getQuantity());
+            view.setTotalAmount(view.getTotalAmount() + e.getTotalAmount());
+            view.setTotalFreight(view.getTotalFreight() + e.getFreightValue());
+            view.setTotalInvoice(view.getTotalInvoice() + e.getTotalInvoice());
+            view.setTotalItems(view.getTotalItems() + e.getTotalItems());
+            view.setTotalIncentive(view.getTotalIncentive() + e.getTotalIncentive());
+        }
+        view.setCountOrders(orderIds.size());
+        return view;
     }
 
     @Override

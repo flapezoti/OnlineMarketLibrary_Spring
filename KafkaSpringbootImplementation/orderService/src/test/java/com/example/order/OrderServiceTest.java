@@ -238,6 +238,38 @@ public class OrderServiceTest {
                 () -> orderService.processPaymentConfirmed(pc));
     }
 
+    // ---- idempotent consumers (at-least-once delivery) --------------------------------
+
+    @Test
+    public void testPaymentConfirmedIsIdempotent() {
+        Order order = new Order();
+        order.setId(new OrderId(1001, 1));
+        order.setStatus(OrderStatus.CREATED);
+        order.setInvoiceNumber("INV-IDEM-1");
+        order.setPurchaseDate(LocalDateTime.now());
+        order.setCreatedAt(LocalDateTime.now());
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+
+        CustomerCheckout cc = new CustomerCheckout();
+        cc.setCustomerId(1001);
+        PaymentConfirmed pc = new PaymentConfirmed();
+        pc.setCustomer(cc);
+        pc.setOrderId(1);
+        pc.setDate(LocalDateTime.now());
+
+        orderService.processPaymentConfirmed(pc);
+        orderService.processPaymentConfirmed(pc); // redelivery
+
+        assertEquals(1, orderRepository.findByCustomerId(1001).size());
+        assertEquals(OrderStatus.PAYMENT_PROCESSED,
+                orderRepository.findByCustomerIdAndOrderId(1001, 1).orElseThrow().getStatus());
+        long paymentProcessedRows = orderHOrderRepository.findByCustomerIdAndOrderId(1001, 1).stream()
+                .filter(h -> h.getStatus() == OrderStatus.PAYMENT_PROCESSED)
+                .count();
+        assertEquals(1, paymentProcessedRows);
+    }
+
     // ---- no duplicate checkouts ---------------------------------------------------------
 
     @Test

@@ -11,6 +11,7 @@ import com.example.common.events.PaymentFailed;
 import com.example.common.events.ShipmentNotification;
 import com.example.common.messaging.PredecessorNotReadyException;
 import com.example.common.requests.CustomerCheckout;
+import com.example.seller.dto.SellerDashboard;
 import com.example.seller.model.OrderEntry;
 import com.example.seller.model.OrderEntryId;
 import com.example.seller.repository.IOrderEntryRepository;
@@ -158,5 +159,55 @@ public class SellerServiceTest {
         sn.setCustomerId(9);
         sn.setStatus(ShipmentStatus.APPROVED);
         assertThrows(PredecessorNotReadyException.class, () -> sellerService.processShipmentNotification(sn));
+    }
+
+    // ---- dashboard: list and aggregate come from one snapshot -------------------------
+
+    private void seedRichEntry(int customerId, int orderId, int sellerId, int productId,
+            OrderStatus status, int qty, float totalAmount, float freight, float totalInvoice) {
+        OrderEntry e = new OrderEntry();
+        e.setId(new OrderEntryId(customerId, orderId, sellerId, productId));
+        e.setOrderStatus(status);
+        e.setQuantity(qty);
+        e.setTotalAmount(totalAmount);
+        e.setFreightValue(freight);
+        e.setTotalInvoice(totalInvoice);
+        orderEntryRepository.save(e);
+    }
+
+    @Test
+    public void testProcessInvoiceIssuedIsIdempotent() {
+        InvoiceIssued invoiceIssued = new InvoiceIssued();
+        invoiceIssued.setOrderId(1001);
+        invoiceIssued.setCustomer(customer(1));
+        invoiceIssued.setItems(oneItem(1001, 1, 2001));
+
+        sellerService.processInvoiceIssued(invoiceIssued);
+        sellerService.processInvoiceIssued(invoiceIssued); // redelivery
+
+        List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(1, 1001);
+        assertEquals(1, entries.size());
+        assertEquals(OrderStatus.INVOICED, entries.get(0).getOrderStatus());
+    }
+
+    @Test
+    public void testQueryDashboardAggregatesOngoingOnlyFromOneSnapshot() {
+        int sellerId = 5;
+        seedRichEntry(1, 100, sellerId, 1, OrderStatus.INVOICED, 2, 100f, 10f, 110f);
+        seedRichEntry(1, 101, sellerId, 1, OrderStatus.PAYMENT_PROCESSED, 3, 150f, 15f, 165f);
+        seedRichEntry(1, 102, sellerId, 1, OrderStatus.DELIVERED, 9, 900f, 90f, 990f);       // terminal
+        seedRichEntry(1, 103, sellerId, 1, OrderStatus.PAYMENT_FAILED, 7, 700f, 70f, 770f);  // terminal
+
+        SellerDashboard dashboard = sellerService.queryDashboard(sellerId);
+
+        // discriminated list = every entry for the seller
+        assertEquals(4, dashboard.getOrderEntries().size());
+
+        // aggregate = ongoing entries only
+        assertEquals(2, dashboard.getSellerView().getCountOrders());
+        assertEquals(5, dashboard.getSellerView().getCountItems());
+        assertEquals(250f, dashboard.getSellerView().getTotalAmount(), 0.001f);
+        assertEquals(25f, dashboard.getSellerView().getTotalFreight(), 0.001f);
+        assertEquals(275f, dashboard.getSellerView().getTotalInvoice(), 0.001f);
     }
 }
