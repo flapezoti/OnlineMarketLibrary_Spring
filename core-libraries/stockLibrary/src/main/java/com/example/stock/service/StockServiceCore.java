@@ -20,6 +20,7 @@ import com.example.stock.model.StockItem;
 import com.example.stock.model.StockItemId;
 import com.example.stock.model.StockItem;
 import com.example.stock.config.IStockConfig;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
 import com.example.stock.repository.IStockRepository;
 import java.time.LocalDateTime;
@@ -117,7 +118,7 @@ public class StockServiceCore implements IStockService {
                 productUpdated.getSellerId(),
                 MarkStatus.SUCCESS,
                 "stock");
-        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", null, transactionMark);
     }
 
     /**
@@ -142,7 +143,7 @@ public class StockServiceCore implements IStockService {
                     productDelete.getSellerId(), productDelete.getProductId());
         }
 
-        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", new TransactionMark(
+        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", null, new TransactionMark(
                 productDelete.getInstanceId(),
                 TransactionType.UPDATE_PRODUCT,
                 productDelete.getSellerId(),
@@ -159,6 +160,9 @@ public class StockServiceCore implements IStockService {
     @Override
     public void reserveStock(ReserveStock checkout) {
         LocalDateTime now = LocalDateTime.now();
+        String customerKey = checkout.getCustomerCheckout() == null
+                ? null
+                : EventKeys.customer(checkout.getCustomerCheckout().getCustomerId());
         List<StockItem> items = new ArrayList<>();
 
         for (CartItem item : checkout.getItems()) {
@@ -218,7 +222,7 @@ public class StockServiceCore implements IStockService {
                     checkout.getCustomerCheckout(),
                     cartItemsReserved,
                     checkout.getInstanceId());
-            eventPublisher.publishEvent("stock-confirmed-topic", stockConfirmed);
+            eventPublisher.publishEvent("stock-confirmed-topic", customerKey, stockConfirmed);
             logger.info("successfully send stock confirmed topic");
         }
 
@@ -229,7 +233,7 @@ public class StockServiceCore implements IStockService {
                         checkout.getCustomerCheckout(),
                         unavailableItems,
                         checkout.getInstanceId());
-                eventPublisher.publishEvent("stock-failed-topic", reserveFailed);
+                eventPublisher.publishEvent("stock-failed-topic", customerKey, reserveFailed);
             }
             if (cartItemsReserved.isEmpty()) {
                 sendTransactionMark(checkout.getInstanceId(),
@@ -245,7 +249,7 @@ public class StockServiceCore implements IStockService {
                 customerId,
                 status,
                 "stock");
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 
     @Override
@@ -290,7 +294,8 @@ public class StockServiceCore implements IStockService {
         updatedStockItem.setYtd(stockItem.getYtd());
         updatedStockItem.setData(stockItem.getData());
 
-        eventPublisher.publishEvent("stock-update-topic", stockItem);
+        eventPublisher.publishEvent("stock-update-topic",
+                EventKeys.product(stockItem.getSellerId(), stockItem.getProductId()), stockItem);
     }
 
     @Override
@@ -334,7 +339,7 @@ public class StockServiceCore implements IStockService {
                 reserveStock.getCustomerCheckout().getCustomerId(),
                 MarkStatus.ABORT,
                 "stock");
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 
     @Override
@@ -345,7 +350,7 @@ public class StockServiceCore implements IStockService {
                 productUpdate.getSellerId(),
                 MarkStatus.ABORT,
                 "stock");
-        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", null, transactionMark);
     }
 
     @Override

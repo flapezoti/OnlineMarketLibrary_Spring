@@ -1,261 +1,162 @@
-package com.example.seller;// package com.example.seller;
+package com.example.seller;
 
- import com.example.common.entities.OrderItem;
- import com.example.common.entities.OrderStatus;
- import com.example.common.entities.PackageStatus;
- import com.example.common.entities.ShipmentStatus;
- import com.example.common.events.DeliveryNotification;
- import com.example.common.events.InvoiceIssued;
- import com.example.common.events.PaymentFailed;
- import com.example.common.events.ShipmentNotification;
- import com.example.common.requests.CustomerCheckout;
- import com.example.seller.model.OrderEntry;
- import com.example.seller.model.OrderEntryId;
- import com.example.seller.repository.IOrderEntryRepository;
- import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.common.entities.OrderItem;
+import com.example.common.entities.OrderStatus;
+import com.example.common.entities.PackageStatus;
+import com.example.common.entities.ShipmentStatus;
+import com.example.common.events.DeliveryNotification;
+import com.example.common.events.InvoiceIssued;
+import com.example.common.events.PaymentConfirmed;
+import com.example.common.events.PaymentFailed;
+import com.example.common.events.ShipmentNotification;
+import com.example.common.messaging.PredecessorNotReadyException;
+import com.example.common.requests.CustomerCheckout;
+import com.example.seller.model.OrderEntry;
+import com.example.seller.model.OrderEntryId;
+import com.example.seller.repository.IOrderEntryRepository;
+import com.example.seller.service.ISellerService;
 
- import org.junit.jupiter.api.BeforeEach;
- import org.junit.jupiter.api.Test;
- import org.springframework.beans.factory.annotation.Autowired;
- import org.springframework.boot.test.context.SpringBootTest;
- import org.springframework.kafka.core.KafkaTemplate;
-// import org.springframework.kafka.test.context.EmbeddedKafka;
-// import org.springframework.test.annotation.DirtiesContext;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
- import java.util.ArrayList;
- import java.util.List;
- import java.util.concurrent.TimeUnit;
+import java.util.ArrayList;
+import java.util.List;
 
- import static org.junit.jupiter.api.Assertions.assertEquals;
- import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-//@EmbeddedKafka(partitions = 1, topics = {
-//        "delivery-notification-topic",
-//        "invoice-issued-topic",
-//        "payment-failed-topic",
-//        "shipment-notification-topic",
-//        "payment-confirmed-topic"
-//})
-//@DirtiesContext
-//@SpringBootTest(properties = {
-//        "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
-//        "spring.kafka.consumer.group-id=seller-group"
-//})
- @SpringBootTest
+@SpringBootTest
+public class SellerServiceTest {
 
- public class SellerServiceTest {
+    @Autowired
+    private ISellerService sellerService;
 
-     @Autowired
-     private KafkaTemplate<String, String> kafkaTemplate;
+    @Autowired
+    private IOrderEntryRepository orderEntryRepository;
 
-     @Autowired
-     private ObjectMapper objectMapper;
+    @BeforeEach
+    public void setUp() {
+        orderEntryRepository.deleteAll();
+    }
 
-     @Autowired
-     private IOrderEntryRepository orderEntryRepository;
+    private void seedEntry(int customerId, int orderId, int sellerId, int productId, OrderStatus status) {
+        OrderEntry entry = new OrderEntry();
+        entry.setId(new OrderEntryId(customerId, orderId, sellerId, productId));
+        entry.setOrderStatus(status);
+        orderEntryRepository.save(entry);
+    }
 
-     @BeforeEach
-     public void setUp() {
-         orderEntryRepository.deleteAll();
-         
-     }
+    private List<OrderItem> oneItem(int orderId, int sellerId, int productId) {
+        OrderItem item = new OrderItem();
+        item.setOrderId(orderId);
+        item.setOrderItemId(1);
+        item.setProductId(productId);
+        item.setProductName("Test Product");
+        item.setSellerId(sellerId);
+        item.setUnitPrice(100.0f);
+        item.setQuantity(2);
+        item.setTotalAmount(200.0f);
+        item.setFreightValue(10.0f);
+        List<OrderItem> items = new ArrayList<>();
+        items.add(item);
+        return items;
+    }
 
-     @Test
-     public void testProcessPaymentFailed() throws Exception {
-         // Step 1: Initialize CustomerCheckout and create initial OrderEntry with a
-         // non-failed status
-         CustomerCheckout customerCheckout = new CustomerCheckout();
-         customerCheckout.setCustomerId(1);
+    private CustomerCheckout customer(int id) {
+        CustomerCheckout cc = new CustomerCheckout();
+        cc.setCustomerId(id);
+        return cc;
+    }
 
-         OrderEntryId orderEntryId = new OrderEntryId(
-                 1,
-                 1001, // Order ID
-                 1, // Seller ID
-                 2001 // Product ID
-         );
+    @Test
+    public void testProcessInvoiceIssued() {
+        InvoiceIssued invoiceIssued = new InvoiceIssued();
+        invoiceIssued.setOrderId(1001);
+        invoiceIssued.setCustomer(customer(1));
+        invoiceIssued.setItems(oneItem(1001, 1, 2001));
 
-         OrderEntry initialEntry = new OrderEntry();
-         initialEntry.setId(orderEntryId);
-         initialEntry.setOrderStatus(OrderStatus.CREATED); // Initial status
-         orderEntryRepository.save(initialEntry); // Save initial entry
+        sellerService.processInvoiceIssued(invoiceIssued);
 
-         // Step 2: Create and send PaymentFailed event
-         PaymentFailed paymentFailed = new PaymentFailed();
+        List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(1, 1001);
+        assertEquals(1, entries.size());
+        assertEquals(OrderStatus.INVOICED, entries.get(0).getOrderStatus());
+    }
 
-         // Set the order ID
-         paymentFailed.setOrderId(1001);
-         paymentFailed.setCustomer(customerCheckout);
-         // Set the status
-         paymentFailed.setStatus("FAILED");
+    @Test
+    public void testProcessPaymentFailed() {
+        seedEntry(1, 1001, 1, 2001, OrderStatus.CREATED);
 
-         // Set the list of items
-         List<OrderItem> items = new ArrayList<>();
-         OrderItem orderItem = new OrderItem();
-         orderItem.setOrderId(1001);
-         orderItem.setOrderItemId(1);
-         orderItem.setProductId(2001);
-         orderItem.setProductName("Test Product");
-         orderItem.setSellerId(1);
-         orderItem.setUnitPrice(100.0f);
-         orderItem.setQuantity(2);
-         orderItem.setTotalAmount(200.0f); // unitPrice * quantity
-         orderItem.setFreightValue(10.0f);
-         items.add(orderItem);
-         paymentFailed.setItems(items);
+        PaymentFailed paymentFailed = new PaymentFailed();
+        paymentFailed.setOrderId(1001);
+        paymentFailed.setCustomer(customer(1));
+        paymentFailed.setStatus("FAILED");
+        paymentFailed.setItems(oneItem(1001, 1, 2001));
 
-         // Set the total amount
-         paymentFailed.setTotalAmount(210.0f); // totalAmount + freight
+        sellerService.processPaymentFailed(paymentFailed);
 
-         // Set the instance ID
-         paymentFailed.setInstanceId("test-instance-id");
+        List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(1, 1001);
+        assertEquals(1, entries.size());
+        assertEquals(OrderStatus.PAYMENT_FAILED, entries.get(0).getOrderStatus());
+    }
 
-         kafkaTemplate.send("payment-failed-topic", objectMapper.writeValueAsString(paymentFailed));
-         TimeUnit.MILLISECONDS.sleep(500); // Wait for the event to process
+    @Test
+    public void testProcessShipmentNotification() {
+        seedEntry(1, 1001, 1, 2001, OrderStatus.INVOICED);
 
-         // Step 3: Retrieve and verify that OrderEntry status is updated to
-         // PAYMENT_FAILED
-         List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(
-                 paymentFailed.getCustomer().getCustomerId(), paymentFailed.getOrderId());
+        ShipmentNotification shipmentNotification = new ShipmentNotification();
+        shipmentNotification.setOrderId(1001);
+        shipmentNotification.setCustomerId(1);
+        shipmentNotification.setStatus(ShipmentStatus.APPROVED);
 
-         assertNotNull(entries);
-         assertEquals(1, entries.size());
-         assertEquals(OrderStatus.PAYMENT_FAILED, entries.get(0).getOrderStatus());
-     }
+        sellerService.processShipmentNotification(shipmentNotification);
 
-     @Test
-     public void testProcessDeliveryNotification() throws Exception {
-         CustomerCheckout customerCheckout = new CustomerCheckout();
-         customerCheckout.setCustomerId(1);
+        List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(1, 1001);
+        assertEquals(1, entries.size());
+        assertEquals(OrderStatus.READY_FOR_SHIPMENT, entries.get(0).getOrderStatus());
+    }
 
-         OrderEntryId orderEntryId = new OrderEntryId(
-                 customerCheckout.getCustomerId(),
-                 1001, // Order ID
-                 1, // Seller ID
-                 2001 // Product ID
-         );
+    @Test
+    public void testProcessDeliveryNotification() {
+        OrderEntry entry = new OrderEntry();
+        entry.setId(new OrderEntryId(1, 1001, 1, 2001));
+        entry.setOrderStatus(OrderStatus.INVOICED);
+        entry.setDeliveryStatus(PackageStatus.READY_TO_SHIP);
+        orderEntryRepository.save(entry);
 
-         OrderEntry initialEntry = new OrderEntry();
-         initialEntry.setId(orderEntryId);
-         initialEntry.setOrderStatus(OrderStatus.INVOICED);
-         initialEntry.setDeliveryStatus(PackageStatus.READY_TO_SHIP); // Initial status
-         orderEntryRepository.save(initialEntry);
+        DeliveryNotification deliveryNotification = new DeliveryNotification();
+        deliveryNotification.setOrderId(1001);
+        deliveryNotification.setSellerId(1);
+        deliveryNotification.setCustomerId(1);
+        deliveryNotification.setProductId(2001);
+        deliveryNotification.setStatus(PackageStatus.DELIVERED);
 
-         DeliveryNotification deliveryNotification = new DeliveryNotification();
-         deliveryNotification.setOrderId(1001);
-         deliveryNotification.setSellerId(1);
-         deliveryNotification.setCustomerId(1);
-         deliveryNotification.setProductId(2001);
-         deliveryNotification.setStatus(PackageStatus.DELIVERED);
+        sellerService.processDeliveryNotification(deliveryNotification);
 
-         kafkaTemplate.send("delivery-notification-topic", objectMapper.writeValueAsString(deliveryNotification));
-         TimeUnit.MILLISECONDS.sleep(500);
+        OrderEntry updated = orderEntryRepository
+                .findById(new OrderEntryId(1, 1001, 1, 2001)).orElse(null);
+        assertNotNull(updated);
+        assertEquals(PackageStatus.DELIVERED, updated.getDeliveryStatus());
+    }
 
-         OrderEntryId entryId = new OrderEntryId(
-                 deliveryNotification.getCustomerId(),
-                 deliveryNotification.getOrderId(),
-                 deliveryNotification.getSellerId(),
-                 deliveryNotification.getProductId());
+    // ---- out-of-order arrival: no order entries yet -> retryable signal --------------
 
-         OrderEntry entry = orderEntryRepository.findById(entryId).orElse(null);
+    @Test
+    public void testPaymentConfirmedBeforeInvoiceThrows() {
+        PaymentConfirmed pc = new PaymentConfirmed();
+        pc.setOrderId(4242);
+        pc.setCustomer(customer(9));
+        assertThrows(PredecessorNotReadyException.class, () -> sellerService.processPaymentConfirmed(pc));
+    }
 
-         assertNotNull(entry);
-         assertEquals(PackageStatus.DELIVERED, entry.getDeliveryStatus());
-     }
-
-     @Test
-     public void testProcessInvoiceIssued() throws Exception {
-         // Setup CustomerCheckout data
-         CustomerCheckout customerCheckout = new CustomerCheckout();
-         customerCheckout.setCustomerId(1);
-         customerCheckout.setFirstName("John");
-         customerCheckout.setLastName("Doe");
-         customerCheckout.setStreet("123 Main St");
-         customerCheckout.setCity("Sample City");
-         customerCheckout.setState("SC");
-         customerCheckout.setZipCode("12345");
-         customerCheckout.setPaymentType("CreditCard");
-         customerCheckout.setCardNumber("4111111111111111");
-         customerCheckout.setCardHolderName("John Doe");
-         customerCheckout.setCardExpiration("1225");
-         customerCheckout.setCardSecurityNumber("123");
-         customerCheckout.setCardBrand("VISA");
-         customerCheckout.setInstallments(1);
-
-         // Create and send InvoiceIssued event
-         InvoiceIssued invoiceIssued = new InvoiceIssued();
-         invoiceIssued.setOrderId(1001);
-         invoiceIssued.setCustomer(customerCheckout);
-         List<OrderItem> items = new ArrayList<>();
-         OrderItem orderItem = new OrderItem();
-         orderItem.setOrderId(1001);
-         orderItem.setOrderItemId(1);
-         orderItem.setProductId(2001);
-         orderItem.setProductName("Test Product");
-         orderItem.setSellerId(1);
-         orderItem.setUnitPrice(100.0f);
-         orderItem.setQuantity(2);
-         orderItem.setTotalAmount(200.0f); // unitPrice * quantity
-         orderItem.setFreightValue(10.0f);
-         items.add(orderItem);
-         invoiceIssued.setItems(items);
-
-         OrderEntryId orderEntryId = new OrderEntryId(
-                 customerCheckout.getCustomerId(),
-                 1001, // Order ID
-                 1, // Seller ID
-                 2001 // Product ID
-         );
-
-         OrderEntry initialEntry = new OrderEntry();
-         initialEntry.setId(orderEntryId);
-         initialEntry.setOrderStatus(OrderStatus.INVOICED); // Initial status
-         orderEntryRepository.save(initialEntry);
-
-         kafkaTemplate.send("invoice-issued-topic", objectMapper.writeValueAsString(invoiceIssued));
-         TimeUnit.MILLISECONDS.sleep(100);
-
-         // Validate OrderEntry creation
-         List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(
-                 customerCheckout.getCustomerId(), invoiceIssued.getOrderId());
-
-         assertNotNull(entries);
-         assertEquals(1, entries.size());
-         assertEquals(OrderStatus.INVOICED, entries.get(0).getOrderStatus());
-     }
-
-     @Test
-     public void testProcessShipmentNotification() throws Exception {
-         CustomerCheckout customerCheckout = new CustomerCheckout();
-         customerCheckout.setCustomerId(1);
-
-         OrderEntryId orderEntryId = new OrderEntryId(
-                 customerCheckout.getCustomerId(),
-                 1001, // Order ID
-                 1, // Seller ID
-                 2001 // Product ID
-         );
-
-         OrderEntry initialEntry = new OrderEntry();
-         initialEntry.setId(orderEntryId);
-         initialEntry.setOrderStatus(OrderStatus.INVOICED); // Initial status
-         orderEntryRepository.save(initialEntry);
-         ShipmentNotification shipmentNotification = new ShipmentNotification();
-         shipmentNotification.setOrderId(1001);
-         shipmentNotification.setCustomerId(1);
-         shipmentNotification.setStatus(ShipmentStatus.APPROVED);
-
-         kafkaTemplate.send("shipment-notification-topic", objectMapper.writeValueAsString(shipmentNotification));
-         kafkaTemplate.flush();                       // ★ 立刻把数据刷到 broker
-         TimeUnit.MILLISECONDS.sleep(500);
-
-         List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(
-                 shipmentNotification.getCustomerId(), shipmentNotification.getOrderId());
-
-         assertNotNull(entries);
-         assertEquals(1, entries.size());
-         assertEquals(OrderStatus.READY_FOR_SHIPMENT, entries.get(0).getOrderStatus());
-     }
-
- 
-
- }
+    @Test
+    public void testShipmentNotificationBeforeInvoiceThrows() {
+        ShipmentNotification sn = new ShipmentNotification();
+        sn.setOrderId(4242);
+        sn.setCustomerId(9);
+        sn.setStatus(ShipmentStatus.APPROVED);
+        assertThrows(PredecessorNotReadyException.class, () -> sellerService.processShipmentNotification(sn));
+    }
+}

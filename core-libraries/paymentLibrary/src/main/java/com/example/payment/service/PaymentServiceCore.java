@@ -11,6 +11,7 @@ import com.example.common.events.PaymentFailed;
 import com.example.common.integration.PaymentIntent;
 import com.example.common.integration.PaymentIntentCreateOptions;
 import com.example.common.integration.PaymentStatus;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
 import com.example.payment.config.IPaymentConfig;
 import com.example.payment.model.OrderPayment;
@@ -253,7 +254,9 @@ public class PaymentServiceCore implements IPaymentService {
                             invoiceIssued.getItems(),
                             now,
                             invoiceIssued.getInstanceId());
-                    eventPublisher.publishEvent("payment-confirmed-topic", paymentConfirmed);
+                    eventPublisher.publishEvent("payment-confirmed-topic",
+                            EventKeys.order(invoiceIssued.getCustomer().getCustomerId(), invoiceIssued.getOrderId()),
+                            paymentConfirmed);
                 } else {
                     PaymentFailed paymentFailed = new PaymentFailed(
                             status.name(),
@@ -262,14 +265,16 @@ public class PaymentServiceCore implements IPaymentService {
                             invoiceIssued.getItems(),
                             invoiceIssued.getTotalInvoice(),
                             invoiceIssued.getInstanceId());
-                    eventPublisher.publishEvent("payment-failed-topic", paymentFailed);
+                    eventPublisher.publishEvent("payment-failed-topic",
+                            EventKeys.order(invoiceIssued.getCustomer().getCustomerId(), invoiceIssued.getOrderId()),
+                            paymentFailed);
                     TransactionMark transactionMark = new TransactionMark(
                             invoiceIssued.getInstanceId(),
                             TransactionType.CUSTOMER_SESSION,
                             invoiceIssued.getCustomer().getCustomerId(),
                             MarkStatus.NOT_ACCEPTED,
                             "payment");
-                    eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+                    eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
                 }
             }
 
@@ -288,7 +293,7 @@ public class PaymentServiceCore implements IPaymentService {
                 invoiceIssued.getCustomer().getCustomerId(),
                 MarkStatus.ABORT,
                 "payment");
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 
     @Override

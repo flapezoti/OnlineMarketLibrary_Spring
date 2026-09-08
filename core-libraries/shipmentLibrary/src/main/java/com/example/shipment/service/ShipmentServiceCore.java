@@ -10,6 +10,7 @@ import com.example.common.driver.MarkStatus;
 import com.example.common.driver.TransactionMark;
 import com.example.common.driver.TransactionType;
 //import com.example.shipment.config.IShipmentConfig;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
 import com.example.shipment.model.Package;
 import com.example.shipment.model.PackageId;
@@ -148,7 +149,9 @@ public class ShipmentServiceCore implements IShipmentService {
                 paymentConfirmed.getInstanceId(),
                 ShipmentStatus.APPROVED);
         // eventPublisher.sendShipmentNotification(shipmentNotification);
-        eventPublisher.publishEvent("shipment-notification-topic", shipmentNotification);
+        eventPublisher.publishEvent("shipment-notification-topic",
+                EventKeys.order(paymentConfirmed.getCustomer().getCustomerId(), paymentConfirmed.getOrderId()),
+                shipmentNotification);
 
         TransactionMark transactionMark = new TransactionMark(
                 paymentConfirmed.getInstanceId(),
@@ -156,7 +159,7 @@ public class ShipmentServiceCore implements IShipmentService {
                 paymentConfirmed.getCustomer().getCustomerId(),
                 MarkStatus.SUCCESS,
                 "shipment");
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 
     public void processPoisonShipment(PaymentConfirmed paymentConfirmed) {
@@ -166,7 +169,7 @@ public class ShipmentServiceCore implements IShipmentService {
                 paymentConfirmed.getCustomer().getCustomerId(),
                 MarkStatus.ABORT,
                 "shipment");
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 
     /**
@@ -233,7 +236,8 @@ public class ShipmentServiceCore implements IShipmentService {
             ShipmentNotification notification = new ShipmentNotification(
                     shipment.getCustomerId(), shipment.getOrderId(), now, instanceId,
                     ShipmentStatus.DELIVERY_IN_PROGRESS);
-            eventPublisher.publishEvent("shipment-notification-topic", notification);
+            eventPublisher.publishEvent("shipment-notification-topic",
+                    EventKeys.order(shipment.getCustomerId(), shipment.getOrderId()), notification);
         }
 
         int countDelivered = packageRepository.getTotalDeliveredPackagesForOrder(customerId, orderId,
@@ -248,7 +252,8 @@ public class ShipmentServiceCore implements IShipmentService {
                     pack.getSellerId(), pack.getProductId(), pack.getProductName(),
                     PackageStatus.DELIVERED, now, instanceId);
             // send event
-            eventPublisher.publishEvent("delivery-notification-topic", delivery);
+            eventPublisher.publishEvent("delivery-notification-topic",
+                    EventKeys.order(shipment.getCustomerId(), shipment.getOrderId()), delivery);
         }
         packageRepository.saveAll(sellerPackages);
 
@@ -259,7 +264,8 @@ public class ShipmentServiceCore implements IShipmentService {
             ShipmentNotification notification = new ShipmentNotification(
                     shipment.getCustomerId(), shipment.getOrderId(), now, instanceId,
                     ShipmentStatus.CONCLUDED);
-            eventPublisher.publishEvent("shipment-notification-topic", notification);
+            eventPublisher.publishEvent("shipment-notification-topic",
+                    EventKeys.order(shipment.getCustomerId(), shipment.getOrderId()), notification);
         }
     }
 

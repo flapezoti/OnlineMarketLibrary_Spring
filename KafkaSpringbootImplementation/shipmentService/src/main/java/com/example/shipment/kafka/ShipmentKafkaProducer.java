@@ -31,8 +31,8 @@ public class ShipmentKafkaProducer implements IEventPublisher {
     private static final String TRANSACTION_MARK_TOPIC = "TransactionMark_CUSTOMER_SESSION";
 
     @Override
-    public void publishEvent(String topic, Object... event) {
-        sendAsJson(topic, event);
+    public void publishEvent(String topic, String key, Object event) {
+        sendAsJson(topic, key, event);
     }
 
     public void sendPaymentConfirmed(PaymentConfirmed paymentConfirmed) {
@@ -58,9 +58,13 @@ public class ShipmentKafkaProducer implements IEventPublisher {
      * Serialize the message object into JSON and publish it to the specified topic.
      */
     private void sendAsJson(String topic, Object payload) {
+        sendAsJson(topic, null, payload);
+    }
+
+    private void sendAsJson(String topic, String key, Object payload) {
         try {
             String json = objectMapper.writeValueAsString(payload);
-            kafkaTemplate.send(new ProducerRecord<>(topic, json));
+            kafkaTemplate.send(new ProducerRecord<>(topic, key, json));
         } catch (Exception e) {
             logger.error("Failed to serialize and send message to topic {}: {}", topic, e.getMessage());
         }

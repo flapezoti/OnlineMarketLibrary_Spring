@@ -14,6 +14,7 @@ import com.example.seller.dto.SellerDashboard;
 import com.example.seller.model.OrderEntry;
 import com.example.seller.model.OrderEntryId;
 import com.example.seller.model.OrderSellerView;
+import com.example.common.messaging.PredecessorNotReadyException;
 import com.example.seller.repository.IOrderEntryRepository;
 import com.example.seller.repository.ISellerRepository;
 import com.example.seller.repository.IOrderSellerViewRepository;
@@ -112,6 +113,11 @@ public class SellerServiceCore implements ISellerService {
 
         List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(
                 shipmentNotification.getCustomerId(), shipmentNotification.getOrderId());
+        if (entries.isEmpty()) {
+            throw new PredecessorNotReadyException("No order entries for "
+                    + shipmentNotification.getCustomerId() + "-" + shipmentNotification.getOrderId()
+                    + " yet (InvoiceIssued not processed)");
+        }
 
         for (OrderEntry entry : entries) {
             if (shipmentNotification.getStatus() == ShipmentStatus.APPROVED) {
@@ -143,10 +149,10 @@ public class SellerServiceCore implements ISellerService {
                 deliveryNotification.getSellerId(),
                 deliveryNotification.getProductId()));
 
-        OrderEntry orderEntry = optionalOrderEntry.orElseThrow(() -> new RuntimeException(
-                "[ProcessDeliveryNotification] Cannot find order entry for order id "
-                        + deliveryNotification.getOrderId() + " and product id "
-                        + deliveryNotification.getProductId()));
+        OrderEntry orderEntry = optionalOrderEntry.orElseThrow(() -> new PredecessorNotReadyException(
+                "[ProcessDeliveryNotification] No order entry for order id "
+                        + deliveryNotification.getOrderId() + " product id "
+                        + deliveryNotification.getProductId() + " yet (InvoiceIssued not processed)"));
 
         orderEntry.setPackageId(deliveryNotification.getPackageId());
         orderEntry.setDeliveryDate(deliveryNotification.getDeliveryDate());
@@ -164,9 +170,14 @@ public class SellerServiceCore implements ISellerService {
      */
     @Override
     public void processPaymentConfirmed(PaymentConfirmed paymentConfirmed) {
-        List<OrderEntry> entries = sellerRepository.findByCustomerIdAndOrderId(
+        List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(
                 paymentConfirmed.getCustomer().getCustomerId(),
                 paymentConfirmed.getOrderId());
+        if (entries.isEmpty()) {
+            throw new PredecessorNotReadyException("No order entries for "
+                    + paymentConfirmed.getCustomer().getCustomerId() + "-" + paymentConfirmed.getOrderId()
+                    + " yet (InvoiceIssued not processed)");
+        }
         for (OrderEntry entry : entries) {
             entry.setOrderStatus(OrderStatus.PAYMENT_PROCESSED);
         }
@@ -187,8 +198,9 @@ public class SellerServiceCore implements ISellerService {
                 paymentFailed.getCustomer().getCustomerId(),
                 paymentFailed.getOrderId());
         if (entries.isEmpty()) {
-            logger.warn("No entries found for customerId: {}, orderId: {}",
-                    paymentFailed.getCustomer().getCustomerId(), paymentFailed.getOrderId());
+            throw new PredecessorNotReadyException("No order entries for "
+                    + paymentFailed.getCustomer().getCustomerId() + "-" + paymentFailed.getOrderId()
+                    + " yet (InvoiceIssued not processed)");
         }
         for (OrderEntry entry : entries) {
             entry.setOrderStatus(OrderStatus.PAYMENT_FAILED);

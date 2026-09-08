@@ -18,6 +18,9 @@ public class OrderKafkaListener {
         jsonOrderConsumer.handleStockConfirmed(record.value());
     }
 
+    // The events below can arrive before the order exists (they are on a different topic than
+    // the creator). A PredecessorNotReadyException from the handler is retried with backoff by
+    // the DefaultErrorHandler (see KafkaRetryConfig) rather than being dropped.
     @KafkaListener(topics = "payment-confirmed-topic", groupId = "order-group")
     public void listenPaymentConfirmed(ConsumerRecord<String, String> record) {
         jsonOrderConsumer.handlePaymentConfirmed(record.value());

@@ -40,6 +40,12 @@ public class OrderServiceTest {
     private KafkaTemplate<String, String> kafkaTemplate;
 
     @Autowired
+    private com.example.order.kafka.OrderKafkaProducer orderKafkaProducer;
+
+    @Autowired
+    private com.example.order.service.IOrderService orderService;
+
+    @Autowired
     private RedisOrderRepository orderRepository;
     @Autowired
     private RedisOrderHistoryRepository orderHOrderRepository;
@@ -107,9 +113,7 @@ public class OrderServiceTest {
         items.add(item2);
         stockConfirmed.setItems(items);
 
-        String payload = objectMapper.writeValueAsString(stockConfirmed);
-        kafkaTemplate.send("stock-confirmed-topic", payload);
-        TimeUnit.MILLISECONDS.sleep(200);
+        orderService.processStockConfirmed(stockConfirmed).join();
 
         Order updatedOrder = orderRepository.findByCustomerIdAndOrderId(1001, 1).orElse(null);
 
@@ -144,9 +148,7 @@ public class OrderServiceTest {
         paymentConfirmed.setOrderId(1);
         paymentConfirmed.setDate(LocalDateTime.now());
 
-        String payload = objectMapper.writeValueAsString(paymentConfirmed);
-        kafkaTemplate.send("payment-confirmed-topic", payload);
-        TimeUnit.MILLISECONDS.sleep(200);
+        orderService.processPaymentConfirmed(paymentConfirmed);
 
         Order updatedOrder = orderRepository.findByCustomerIdAndOrderId(1001, 1).orElse(null);
         assertNotNull(updatedOrder);
@@ -181,9 +183,7 @@ public class OrderServiceTest {
         paymentFailed.setCustomer(customerCheckout);
         paymentFailed.setOrderId(1);
 
-        String payload = objectMapper.writeValueAsString(paymentFailed);
-        kafkaTemplate.send("payment-failed-topic", payload);
-        TimeUnit.MILLISECONDS.sleep(200);
+        orderService.processPaymentFailed(paymentFailed);
 
         Order updateOrder = orderRepository.findByCustomerIdAndOrderId(1001, 1).orElse(null);
         assertNotNull(updateOrder);
@@ -218,14 +218,24 @@ public class OrderServiceTest {
         shipmentNotification.setStatus(ShipmentStatus.CONCLUDED);
         shipmentNotification.setEventDate(LocalDateTime.now());
 
-        String payload = objectMapper.writeValueAsString(shipmentNotification);
-        kafkaTemplate.send("shipment-notification-topic", payload);
-
-        TimeUnit.MILLISECONDS.sleep(200);
+        orderService.processShipmentNotification(shipmentNotification);
 
         Order updatedOrder = orderRepository.findByCustomerIdAndOrderId(1001, 1).orElse(null);
         assertNotNull(updatedOrder, "Order should exist in the database");
         assertEquals(OrderStatus.DELIVERED, updatedOrder.getStatus(), "Order status should be updated to DELIVERED");
+    }
+
+    // ---- out-of-order arrival: order not created yet -> retryable signal ---------------
+
+    @Test
+    public void testPaymentConfirmedBeforeOrderThrows() {
+        CustomerCheckout cc = new CustomerCheckout();
+        cc.setCustomerId(7777);
+        PaymentConfirmed pc = new PaymentConfirmed();
+        pc.setCustomer(cc);
+        pc.setOrderId(1);
+        assertThrows(com.example.common.messaging.PredecessorNotReadyException.class,
+                () -> orderService.processPaymentConfirmed(pc));
     }
 
     // ---- no duplicate checkouts ---------------------------------------------------------
@@ -259,6 +269,20 @@ public class OrderServiceTest {
         // With no instanceId there is nothing to key the guard on, so both events are processed.
         assertEquals(2, orderRepository.findByCustomerId(customerId).size(),
                 "without an instanceId the duplicate guard does not apply");
+    }
+
+    @Test
+    public void testProducerPublishRoundTrips() throws Exception {
+        // The real producer path (publishEvent) must emit a bare JSON object the
+        // consumer can deserialize, not a 1-element array.
+        int customerId = 9003;
+        orderKafkaProducer.publishEvent("stock-confirmed-topic",
+                com.example.common.messaging.EventKeys.customer(customerId),
+                buildStockConfirmed(customerId, "roundtrip-1"));
+        TimeUnit.MILLISECONDS.sleep(400);
+
+        assertEquals(1, orderRepository.findByCustomerId(customerId).size(),
+                "an event published via the real producer must deserialize and create an order");
     }
 
     private StockConfirmed buildStockConfirmed(int customerId, String instanceId) {

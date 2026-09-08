@@ -1,6 +1,7 @@
 package com.example.order.eventMessaging;
 
 import com.example.common.events.*;
+import com.example.common.messaging.PredecessorNotReadyException;
 import com.example.order.service.IOrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,6 +122,8 @@ public abstract class AbstractOrderConsumer {
         try {
             PaymentConfirmed paymentConfirmed = deserializePaymentConfirmed(payload);
             orderService.processPaymentConfirmed(paymentConfirmed);
+        } catch (PredecessorNotReadyException e) {
+            throw e; // let the retry machinery handle out-of-order arrival
         } catch (Exception e) {
             logger.error("Failed to process PaymentConfirmed: {}", e.getMessage());
         }
@@ -135,6 +138,8 @@ public abstract class AbstractOrderConsumer {
         try {
             PaymentFailed paymentFailed = deserializePaymentFailed(payload);
             orderService.processPaymentFailed(paymentFailed);
+        } catch (PredecessorNotReadyException e) {
+            throw e; // let the retry machinery handle out-of-order arrival
         } catch (Exception e) {
             logger.error("Failed to process PaymentFailed: {}", e.getMessage());
         }
@@ -149,6 +154,8 @@ public abstract class AbstractOrderConsumer {
         try {
             ShipmentNotification shipmentNotification = deserializeShipmentNotification(payload);
             orderService.processShipmentNotification(shipmentNotification);
+        } catch (PredecessorNotReadyException e) {
+            throw e; // let the retry machinery handle out-of-order arrival
         } catch (Exception e) {
             logger.error("Failed to process ShipmentNotification: {}", e.getMessage());
         }

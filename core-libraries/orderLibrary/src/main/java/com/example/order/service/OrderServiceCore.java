@@ -13,7 +13,9 @@ import com.example.order.repository.IOrderHistoryRepository;
 import com.example.order.repository.IOrderItemRepository;
 import com.example.order.repository.IOrderRepository;
 import com.example.order.repository.IProcessedCheckoutRepository;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
+import com.example.common.messaging.PredecessorNotReadyException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -223,7 +225,10 @@ public class OrderServiceCore implements IOrderService {
                         commonOrderItems,
                         checkout.getInstanceId());
 
-                eventPublisher.publishEvent("invoice-issued-topic", invoiceIssued);
+                eventPublisher.publishEvent("invoice-issued-topic",
+                        EventKeys.order(checkout.getCustomerCheckout().getCustomerId(),
+                                customerOrder.getNextOrderId()),
+                        invoiceIssued);
 
             } catch (Exception e) {
                 throw new RuntimeException("Invoiced issued send failed", e);
@@ -238,9 +243,9 @@ public class OrderServiceCore implements IOrderService {
         Order order = orderRepository
                 .findByCustomerIdAndOrderId(paymentConfirmed.getCustomer().getCustomerId(),
                         paymentConfirmed.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Cannot find order " + paymentConfirmed.getCustomer().getCustomerId() + "-"
-                                + paymentConfirmed.getOrderId()));
+                .orElseThrow(() -> new PredecessorNotReadyException(
+                        "Order " + paymentConfirmed.getCustomer().getCustomerId() + "-"
+                                + paymentConfirmed.getOrderId() + " not created yet"));
 
         order.setStatus(OrderStatus.PAYMENT_PROCESSED);
         order.setPaymentDate(paymentConfirmed.getDate());
@@ -266,9 +271,9 @@ public class OrderServiceCore implements IOrderService {
 
         Order order = orderRepository
                 .findByCustomerIdAndOrderId(paymentFailed.getCustomer().getCustomerId(), paymentFailed.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Cannot find order " + paymentFailed.getCustomer().getCustomerId() + "-"
-                                + paymentFailed.getOrderId()));
+                .orElseThrow(() -> new PredecessorNotReadyException(
+                        "Order " + paymentFailed.getCustomer().getCustomerId() + "-"
+                                + paymentFailed.getOrderId() + " not created yet"));
 
         order.setStatus(OrderStatus.PAYMENT_FAILED);
         order.setUpdatedAt(now);
@@ -294,9 +299,9 @@ public class OrderServiceCore implements IOrderService {
 
         Order order = orderRepository
                 .findByCustomerIdAndOrderId(shipmentNotification.getCustomerId(), shipmentNotification.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Cannot find order " + shipmentNotification.getCustomerId() + "-"
-                                + shipmentNotification.getOrderId()));
+                .orElseThrow(() -> new PredecessorNotReadyException(
+                        "Order " + shipmentNotification.getCustomerId() + "-"
+                                + shipmentNotification.getOrderId() + " not created yet"));
 
         OrderStatus orderStatus = OrderStatus.READY_FOR_SHIPMENT;
         if (shipmentNotification.getStatus() == ShipmentStatus.DELIVERY_IN_PROGRESS) {
@@ -342,7 +347,7 @@ public class OrderServiceCore implements IOrderService {
                     MarkStatus.ABORT,
                     "order");
 
-            eventPublisher.publishEvent("transaction-mark-topic", transactionMark);
+            eventPublisher.publishEvent("transaction-mark-topic", null, transactionMark);
         });
     }
 }

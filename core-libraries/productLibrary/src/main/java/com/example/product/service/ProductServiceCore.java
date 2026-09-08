@@ -7,6 +7,7 @@ import com.example.product.model.Product;
 import com.example.product.model.ProductId;
 import com.example.product.repository.IProductRepository;
 //import com.example.product.kafka.IKafkaProductProducer;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,7 +101,8 @@ public class ProductServiceCore implements IProductService {
                     product.getStatus(),
                     product.getVersion());
 
-            eventPublisher.publishEvent("product-update-topic", productUpdated);
+            eventPublisher.publishEvent("product-update-topic",
+                    EventKeys.product(product.getSellerId(), product.getProductId()), productUpdated);
             logger.info("Product update event sent for productId: {}", product.getProductId());
         } catch (Exception e) {
             logger.error("Error processing product update for productId: {}. Error: {}",
@@ -111,7 +113,7 @@ public class ProductServiceCore implements IProductService {
 
     @Override
     public void processPoisonProductUpdate(Product product) {
-        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", product);
+        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", null, product);
     }
 
     /**
@@ -131,6 +133,7 @@ public class ProductServiceCore implements IProductService {
         productRepository.saveProduct(product);
 
         eventPublisher.publishEvent("product-delete-topic",
+                EventKeys.product(sellerId, productId),
                 new ProductDelete(sellerId, productId, product.getVersion(), instanceId));
         logger.info("Product {}-{} disabled; ProductDelete event sent", sellerId, productId);
     }
@@ -151,12 +154,13 @@ public class ProductServiceCore implements IProductService {
         productRepository.saveProduct(existingProduct);
 
         // send event
-        eventPublisher.publishEvent("price-update-topic", priceUpdate);
+        eventPublisher.publishEvent("price-update-topic",
+                EventKeys.product(priceUpdate.getSellerId(), priceUpdate.getProductId()), priceUpdate);
     }
 
     @Override
     public void processPoisonPriceUpdate(PriceUpdate priceUpdate) {
-        eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", priceUpdate);
+        eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", null, priceUpdate);
     }
 
     @Override

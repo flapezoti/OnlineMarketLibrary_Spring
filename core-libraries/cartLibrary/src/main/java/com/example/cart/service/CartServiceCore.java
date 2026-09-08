@@ -5,6 +5,7 @@ import com.example.cart.repository.*;
 import com.example.common.driver.*;
 import com.example.common.entities.CartStatus;
 import com.example.common.events.*;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
 import com.example.common.requests.CustomerCheckout;
 
@@ -161,7 +162,8 @@ public class CartServiceCore implements ICartService {
         LocalDateTime timestamp = LocalDateTime.now();
         ReserveStock checkout = new ReserveStock(timestamp, customerCheckout, cartItems,
                 customerCheckout.getInstanceId());
-        eventPublisher.publishEvent("reserve-stock-topic", checkout);
+        eventPublisher.publishEvent("reserve-stock-topic",
+                EventKeys.customer(customerCheckout.getCustomerId()), checkout);
     }
 
     /**
@@ -237,7 +239,7 @@ public class CartServiceCore implements ICartService {
             logger.warn("Stale/duplicate PriceUpdate for {}-{} (incoming v{}, replica v{}); skipping writes",
                     priceUpdate.getSellerId(), priceUpdate.getProductId(),
                     priceUpdate.getVersion(), product.getVersion());
-            eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", new TransactionMark(
+            eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", null, new TransactionMark(
                     priceUpdate.getInstanceId(), TransactionType.PRICE_UPDATE,
                     priceUpdate.getSellerId(), MarkStatus.SUCCESS, "cart"));
             return;
@@ -264,7 +266,7 @@ public class CartServiceCore implements ICartService {
                 MarkStatus.SUCCESS,
                 "cart");
 
-        eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", null, transactionMark);
     }
 
     /**
@@ -320,7 +322,7 @@ public class CartServiceCore implements ICartService {
                     "cart");
         }
 
-        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", null, transactionMark);
     }
 
     /**
@@ -349,7 +351,7 @@ public class CartServiceCore implements ICartService {
                     "cart");
         }
         // asyn
-        CompletableFuture.runAsync(() -> eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", transactionMark));
+        CompletableFuture.runAsync(() -> eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", null, transactionMark));
     }
 
     /**
@@ -378,6 +380,6 @@ public class CartServiceCore implements ICartService {
                     "cart");
         }
 
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 }
