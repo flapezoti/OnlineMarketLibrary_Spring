@@ -6,6 +6,7 @@ import com.example.common.events.ReserveStock;
 import com.example.common.messaging.IEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,8 +33,8 @@ public class CartKafkaProducer implements IEventPublisher {
     private static final String TRANSACTION_MARK_UPDATE_PRODUCT = "TransactionMark_UPDATE_PRODUCT";
 
     @Override
-    public void publishEvent(String topic, Object ...event) {
-        sendAsJson(topic, event);
+    public void publishEvent(String topic, String key, Object event) {
+        sendAsJson(topic, key, event);
     }
 
     public void sendProductRequest(ProductUpdated productRequest) {
@@ -62,10 +63,14 @@ public class CartKafkaProducer implements IEventPublisher {
     }
 
     private void sendAsJson(String topic, Object payload) {
+        sendAsJson(topic, null, payload);
+    }
+
+    private void sendAsJson(String topic, String key, Object payload) {
         try {
             String json = (payload == null) ? "{}" : objectMapper.writeValueAsString(payload);
 
-            kafkaTemplate.send(topic, json).whenComplete((result, ex) -> {
+            kafkaTemplate.send(new ProducerRecord<>(topic, key, json)).whenComplete((result, ex) -> {
                 if (ex != null) {
                     logger.error("Failed to send message to topic {}: {}", topic, ex.getMessage(), ex);
                 } else {

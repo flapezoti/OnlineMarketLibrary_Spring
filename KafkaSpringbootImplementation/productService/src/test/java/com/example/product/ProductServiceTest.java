@@ -81,6 +81,22 @@ package com.example.product;// package com.example.product;
 //      }
 
      @Test
+     void processDeleteProduct_ShouldDisableProduct() {
+         Product product = new Product();
+         ProductId productId = new ProductId(7, 707);
+         product.setId(productId);
+         product.setName("To be deleted");
+         product.setVersion("1");
+         productService.processCreateProduct(product);
+
+         productService.processDeleteProduct(7, 707, "iid-del");
+
+         Product deleted = productRepository.findById(productId).orElse(null);
+         assertNotNull(deleted);
+         assertEquals("DELETED", deleted.getStatus());
+     }
+
+     @Test
      void reset_ShouldUpdateProductStatusAndVersion() {
          // Given
          Product product = new Product();

@@ -17,6 +17,9 @@ public class SellerKafkaListener {
         jsonSellerConsumer.handleInvoiceIssued(message);
     }
 
+    // The events below can arrive before the order entries exist. A PredecessorNotReadyException
+    // from the handler is retried with backoff by the DefaultErrorHandler (see KafkaRetryConfig)
+    // rather than being dropped.
     @KafkaListener(topics = "payment-failed-topic", groupId = "seller-group")
     public void listenPaymentFailed(String message) {
         jsonSellerConsumer.handlePaymentFailed(message);
@@ -37,4 +40,3 @@ public class SellerKafkaListener {
         jsonSellerConsumer.handlePaymentConfirmed(message);
     }
 }
-

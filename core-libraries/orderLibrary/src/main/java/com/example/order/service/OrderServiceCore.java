@@ -12,7 +12,15 @@ import com.example.order.repository.ICustomerOrderRepository;
 import com.example.order.repository.IOrderHistoryRepository;
 import com.example.order.repository.IOrderItemRepository;
 import com.example.order.repository.IOrderRepository;
+import com.example.order.repository.IProcessedCheckoutRepository;
+import com.example.common.audit.AuditRecord;
+import com.example.common.audit.IAuditLogRepository;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
+import com.example.common.messaging.PredecessorNotReadyException;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -60,28 +68,65 @@ import java.util.concurrent.CompletableFuture;
  */
 public class OrderServiceCore implements IOrderService {
 
+    private static final Logger logger = LoggerFactory.getLogger(OrderServiceCore.class);
+
     private final IOrderRepository orderRepository;
     private final IOrderItemRepository orderItemRepository;
     private final IOrderHistoryRepository orderHistoryRepository;
     private final ICustomerOrderRepository customerOrderRepository;
+    private final IProcessedCheckoutRepository processedCheckoutRepository;
+    private final IAuditLogRepository auditLogRepository;
     private final IEventPublisher eventPublisher;
 
     public OrderServiceCore(IOrderRepository orderRepository,
             IOrderItemRepository orderItemRepository,
             IOrderHistoryRepository orderHistoryRepository,
             ICustomerOrderRepository customerOrderRepository,
+            IProcessedCheckoutRepository processedCheckoutRepository,
+            IAuditLogRepository auditLogRepository,
             IEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.orderHistoryRepository = orderHistoryRepository;
         this.customerOrderRepository = customerOrderRepository;
+        this.processedCheckoutRepository = processedCheckoutRepository;
+        this.auditLogRepository = auditLogRepository;
         this.eventPublisher = eventPublisher;
+    }
+
+    /** Durable audit snapshot of an order and its lines/history at a key event. */
+    private void logOrderSnapshot(String trigger, int customerId, int orderId) {
+        orderRepository.findByCustomerIdAndOrderId(customerId, orderId).ifPresent(order ->
+                auditLogRepository.append(new AuditRecord("order", trigger, customerId, orderId)
+                        .with("order", order)
+                        .with("orderItems", orderItemRepository.findByCustomerIdAndOrderId(customerId, orderId))
+                        .with("orderHistory", orderHistoryRepository.findByCustomerIdAndOrderId(customerId, orderId))));
     }
 
     @Override
     public CompletableFuture<Void> processStockConfirmed(StockConfirmed checkout) {
         return CompletableFuture.runAsync(() -> {
             try {
+                // Skip this checkout if it has already been processed: StockConfirmed can be
+                // redelivered (at-least-once messaging) or emitted more than once for the same
+                // checkout, and each pass would otherwise create a separate order. Dedup is keyed
+                // on the caller-supplied instanceId; markProcessed is a single atomic Redis SET NX,
+                // so concurrent redeliveries are handled without locking. A StockConfirmed with no
+                // instanceId cannot be guarded and is processed as-is.
+                // NOTE: this is not atomic with the writes below. If order creation fails after
+                // this point, the checkout is marked processed but no order exists; recovering
+                // from a partial write would require a cross-service transaction, which this
+                // codebase does not provide.
+                String instanceId = checkout.getInstanceId();
+                if (instanceId == null || instanceId.isBlank()) {
+                    logger.warn("StockConfirmed has no instanceId; cannot guard against duplicate "
+                            + "processing (customerId={})", checkout.getCustomerCheckout().getCustomerId());
+                } else if (!processedCheckoutRepository.markProcessed(instanceId)) {
+                    logger.warn("Duplicate StockConfirmed ignored (instanceId={}, customerId={})",
+                            instanceId, checkout.getCustomerCheckout().getCustomerId());
+                    return;
+                }
+
                 LocalDateTime now = LocalDateTime.now();
 
                 float totalFreight = 0;
@@ -194,7 +239,10 @@ public class OrderServiceCore implements IOrderService {
                         commonOrderItems,
                         checkout.getInstanceId());
 
-                eventPublisher.publishEvent("invoice-issued-topic", invoiceIssued);
+                eventPublisher.publishEvent("invoice-issued-topic",
+                        EventKeys.order(checkout.getCustomerCheckout().getCustomerId(),
+                                customerOrder.getNextOrderId()),
+                        invoiceIssued);
 
             } catch (Exception e) {
                 throw new RuntimeException("Invoiced issued send failed", e);
@@ -209,9 +257,9 @@ public class OrderServiceCore implements IOrderService {
         Order order = orderRepository
                 .findByCustomerIdAndOrderId(paymentConfirmed.getCustomer().getCustomerId(),
                         paymentConfirmed.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Cannot find order " + paymentConfirmed.getCustomer().getCustomerId() + "-"
-                                + paymentConfirmed.getOrderId()));
+                .orElseThrow(() -> new PredecessorNotReadyException(
+                        "Order " + paymentConfirmed.getCustomer().getCustomerId() + "-"
+                                + paymentConfirmed.getOrderId() + " not created yet"));
 
         order.setStatus(OrderStatus.PAYMENT_PROCESSED);
         order.setPaymentDate(paymentConfirmed.getDate());
@@ -237,9 +285,9 @@ public class OrderServiceCore implements IOrderService {
 
         Order order = orderRepository
                 .findByCustomerIdAndOrderId(paymentFailed.getCustomer().getCustomerId(), paymentFailed.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Cannot find order " + paymentFailed.getCustomer().getCustomerId() + "-"
-                                + paymentFailed.getOrderId()));
+                .orElseThrow(() -> new PredecessorNotReadyException(
+                        "Order " + paymentFailed.getCustomer().getCustomerId() + "-"
+                                + paymentFailed.getOrderId() + " not created yet"));
 
         order.setStatus(OrderStatus.PAYMENT_FAILED);
         order.setUpdatedAt(now);
@@ -257,6 +305,8 @@ public class OrderServiceCore implements IOrderService {
         orderHistory.setOrder(order);
         orderHistoryRepository.save(orderHistory);
 
+        logOrderSnapshot("PAYMENT_FAILED",
+                paymentFailed.getCustomer().getCustomerId(), paymentFailed.getOrderId());
     }
 
     @Override
@@ -265,9 +315,9 @@ public class OrderServiceCore implements IOrderService {
 
         Order order = orderRepository
                 .findByCustomerIdAndOrderId(shipmentNotification.getCustomerId(), shipmentNotification.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Cannot find order " + shipmentNotification.getCustomerId() + "-"
-                                + shipmentNotification.getOrderId()));
+                .orElseThrow(() -> new PredecessorNotReadyException(
+                        "Order " + shipmentNotification.getCustomerId() + "-"
+                                + shipmentNotification.getOrderId() + " not created yet"));
 
         OrderStatus orderStatus = OrderStatus.READY_FOR_SHIPMENT;
         if (shipmentNotification.getStatus() == ShipmentStatus.DELIVERY_IN_PROGRESS) {
@@ -292,15 +342,21 @@ public class OrderServiceCore implements IOrderService {
 
         orderRepository.save(order);
         orderHistoryRepository.save(orderHistory);
+
+        if (shipmentNotification.getStatus() == ShipmentStatus.CONCLUDED) {
+            logOrderSnapshot("SHIPMENT_CONCLUDED",
+                    shipmentNotification.getCustomerId(), shipmentNotification.getOrderId());
+        }
     }
 
     @Override
     public void cleanup() {
         orderItemRepository.deleteAll();
-        ;
         orderHistoryRepository.deleteAll();
         orderRepository.deleteAll();
         customerOrderRepository.deleteAll();
+        processedCheckoutRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 
     @Override
@@ -313,7 +369,7 @@ public class OrderServiceCore implements IOrderService {
                     MarkStatus.ABORT,
                     "order");
 
-            eventPublisher.publishEvent("transaction-mark-topic", transactionMark);
+            eventPublisher.publishEvent("transaction-mark-topic", null, transactionMark);
         });
     }
 }

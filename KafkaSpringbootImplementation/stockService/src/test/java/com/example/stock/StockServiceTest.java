@@ -2,9 +2,11 @@ package com.example.stock;//package com.example.stock;
 import com.example.stock.model.StockItem;
 import com.example.stock.model.StockItemId;
 import com.example.common.events.IncreaseStock;
+import com.example.common.events.ProductDelete;
 import com.example.common.events.ProductUpdated;
 import com.example.common.events.ReserveStock;
 import com.example.common.entities.CartItem;
+import com.example.common.requests.CustomerCheckout;
 import com.example.stock.repository.IStockRepository;
 import com.example.stock.service.IStockService;
 import org.junit.jupiter.api.BeforeEach;
@@ -128,5 +130,42 @@ public class StockServiceTest {
 
         // 验证库存项是否被删除
         assertThat(stockRepository.findById(stockItemId.getSellerId(),stockItemId.getProductId()));
+    }
+
+    @Test
+    public void testProcessProductDeleteMarksInactive() {
+        StockItemId id = new StockItemId(1, 100);
+        stockRepository.save(new StockItem(id, 50, LocalDateTime.now()));
+
+        stockService.processProductDelete(new ProductDelete(1, 100, "1", "iid-del"));
+
+        StockItem after = stockRepository.findById(1, 100)
+                .orElseThrow(() -> new RuntimeException("StockItem not found"));
+        assertThat(after.isActive()).isFalse();
+    }
+
+    @Test
+    public void testReserveStockRefusesInactiveItem() {
+        StockItemId id = new StockItemId(1, 100);
+        StockItem item = new StockItem(id, 50, LocalDateTime.now());
+        item.setActive(false);
+        stockRepository.save(item);
+
+        CartItem cartItem = new CartItem();
+        cartItem.setSellerId(1);
+        cartItem.setProductId(100);
+        cartItem.setQuantity(10);
+        CustomerCheckout customerCheckout = new CustomerCheckout();
+        customerCheckout.setCustomerId(1);
+        ReserveStock reserveStock = new ReserveStock();
+        reserveStock.setCustomerCheckout(customerCheckout);
+        reserveStock.setItems(Collections.singletonList(cartItem));
+        reserveStock.setInstanceId("checkout-inactive");
+
+        stockService.reserveStock(reserveStock);
+
+        StockItem after = stockRepository.findById(id).orElse(null);
+        assertThat(after).isNotNull();
+        assertThat(after.getQtyReserved()).isEqualTo(0);
     }
 }

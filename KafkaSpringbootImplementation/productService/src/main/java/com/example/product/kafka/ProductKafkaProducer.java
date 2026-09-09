@@ -36,8 +36,8 @@ public class ProductKafkaProducer implements IEventPublisher {
     private static final String PRODUCT_UPDATE_TOPIC = "product-update-topic";
 
     @Override
-    public void publishEvent(String topic, Object... event) {
-        sendAsJson(topic, event);
+    public void publishEvent(String topic, String key, Object event) {
+        sendAsJson(topic, key, event);
     }
 
     // Publish the price update event
@@ -72,11 +72,15 @@ public class ProductKafkaProducer implements IEventPublisher {
         sendAsJson(TRANSACTION_PRODUCT_UPDATE_TOPIC, transactionMark);
     }
 
-    // Unified method for serializing and publishing events
     private void sendAsJson(String topic, Object payload) {
+        sendAsJson(topic, null, payload);
+    }
+
+    // Unified method for serializing and publishing events
+    private void sendAsJson(String topic, String key, Object payload) {
         try {
             String json = objectMapper.writeValueAsString(payload);
-            kafkaTemplate.send(new ProducerRecord<>(topic, json));
+            kafkaTemplate.send(new ProducerRecord<>(topic, key, json));
         } catch (Exception e) {
             logger.error("Failed to serialize and send message to topic {}: {}", topic, e.getMessage());
         }

@@ -11,6 +11,7 @@ import com.example.common.events.DeliveryNotification;
 import com.example.common.events.IncreaseStock;
 import com.example.common.events.PaymentConfirmed;
 import com.example.common.events.PaymentFailed;
+import com.example.common.events.ProductDelete;
 import com.example.common.events.ProductUpdated;
 import com.example.common.events.ReserveStock;
 import com.example.common.events.StockConfirmed;
@@ -19,6 +20,7 @@ import com.example.stock.model.StockItem;
 import com.example.stock.model.StockItemId;
 import com.example.stock.model.StockItem;
 import com.example.stock.config.IStockConfig;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
 import com.example.stock.repository.IStockRepository;
 import java.time.LocalDateTime;
@@ -116,7 +118,37 @@ public class StockServiceCore implements IStockService {
                 productUpdated.getSellerId(),
                 MarkStatus.SUCCESS,
                 "stock");
-        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", null, transactionMark);
+    }
+
+    /**
+     * React to a product being disabled at Product: mark the matching stock item inactive
+     * so it can no longer be reserved.
+     * <p>
+     * Eventual consistency only: a lost event leaves this stock item reservable and there
+     * is no reconciliation to repair it.
+     */
+    @Override
+    public void processProductDelete(ProductDelete productDelete) {
+        StockItem stockItem = stockRepository.findForUpdate(
+                productDelete.getSellerId(), productDelete.getProductId());
+        if (stockItem == null) {
+            logger.warn("ProductDelete for {}-{}: no stock item to disable",
+                    productDelete.getSellerId(), productDelete.getProductId());
+        } else {
+            stockItem.setActive(false);
+            stockItem.setUpdatedAt(LocalDateTime.now());
+            stockRepository.save(stockItem);
+            logger.info("Stock item {}-{} marked inactive after ProductDelete",
+                    productDelete.getSellerId(), productDelete.getProductId());
+        }
+
+        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", null, new TransactionMark(
+                productDelete.getInstanceId(),
+                TransactionType.UPDATE_PRODUCT,
+                productDelete.getSellerId(),
+                MarkStatus.SUCCESS,
+                "stock"));
     }
 
     /**
@@ -128,6 +160,9 @@ public class StockServiceCore implements IStockService {
     @Override
     public void reserveStock(ReserveStock checkout) {
         LocalDateTime now = LocalDateTime.now();
+        String customerKey = checkout.getCustomerCheckout() == null
+                ? null
+                : EventKeys.customer(checkout.getCustomerCheckout().getCustomerId());
         List<StockItem> items = new ArrayList<>();
 
         for (CartItem item : checkout.getItems()) {
@@ -155,7 +190,10 @@ public class StockServiceCore implements IStockService {
 
             if (stockItemOpt.isPresent()) {
                 StockItem stockItem = stockItemOpt.get();
-                if (stockItem.getQtyAvailable() >= item.getQuantity()) {
+                if (!stockItem.isActive()) {
+                    unavailableItems.add(new ProductStatus(item.getProductId(), ItemStatus.UNAVAILABLE));
+                    System.out.println("Warning: product disabled/inactive for CartItem: " + item);
+                } else if (stockItem.getQtyAvailable() >= item.getQuantity()) {
                     stockItem.setQtyReserved(stockItem.getQtyReserved() + item.getQuantity());
                     stockItem.setUpdatedAt(now);
                     stockItemsReserved.add(stockItem);
@@ -184,7 +222,7 @@ public class StockServiceCore implements IStockService {
                     checkout.getCustomerCheckout(),
                     cartItemsReserved,
                     checkout.getInstanceId());
-            eventPublisher.publishEvent("stock-confirmed-topic", stockConfirmed);
+            eventPublisher.publishEvent("stock-confirmed-topic", customerKey, stockConfirmed);
             logger.info("successfully send stock confirmed topic");
         }
 
@@ -195,7 +233,7 @@ public class StockServiceCore implements IStockService {
                         checkout.getCustomerCheckout(),
                         unavailableItems,
                         checkout.getInstanceId());
-                eventPublisher.publishEvent("stock-failed-topic", reserveFailed);
+                eventPublisher.publishEvent("stock-failed-topic", customerKey, reserveFailed);
             }
             if (cartItemsReserved.isEmpty()) {
                 sendTransactionMark(checkout.getInstanceId(),
@@ -211,7 +249,7 @@ public class StockServiceCore implements IStockService {
                 customerId,
                 status,
                 "stock");
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 
     @Override
@@ -256,7 +294,8 @@ public class StockServiceCore implements IStockService {
         updatedStockItem.setYtd(stockItem.getYtd());
         updatedStockItem.setData(stockItem.getData());
 
-        eventPublisher.publishEvent("stock-update-topic", stockItem);
+        eventPublisher.publishEvent("stock-update-topic",
+                EventKeys.product(stockItem.getSellerId(), stockItem.getProductId()), stockItem);
     }
 
     @Override
@@ -286,6 +325,7 @@ public class StockServiceCore implements IStockService {
         } else {
             stockItem.setCreatedAt(LocalDateTime.now());
             stockItem.setUpdatedAt(LocalDateTime.now());
+            stockItem.setActive(true);
             existing = stockItem;
         }
         stockRepository.save(existing);
@@ -299,7 +339,7 @@ public class StockServiceCore implements IStockService {
                 reserveStock.getCustomerCheckout().getCustomerId(),
                 MarkStatus.ABORT,
                 "stock");
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 
     @Override
@@ -310,7 +350,7 @@ public class StockServiceCore implements IStockService {
                 productUpdate.getSellerId(),
                 MarkStatus.ABORT,
                 "stock");
-        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", null, transactionMark);
     }
 
     @Override

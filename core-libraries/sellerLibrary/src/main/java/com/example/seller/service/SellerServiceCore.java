@@ -14,6 +14,9 @@ import com.example.seller.dto.SellerDashboard;
 import com.example.seller.model.OrderEntry;
 import com.example.seller.model.OrderEntryId;
 import com.example.seller.model.OrderSellerView;
+import com.example.common.audit.AuditRecord;
+import com.example.common.audit.IAuditLogRepository;
+import com.example.common.messaging.PredecessorNotReadyException;
 import com.example.seller.repository.IOrderEntryRepository;
 import com.example.seller.repository.ISellerRepository;
 import com.example.seller.repository.IOrderSellerViewRepository;
@@ -21,8 +24,10 @@ import com.example.seller.repository.IOrderSellerViewRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Core implementation of {@link ISellerService}.
@@ -47,18 +52,21 @@ public class SellerServiceCore implements ISellerService {
     private final IOrderEntryRepository orderEntryRepository;
     private final IOrderSellerViewRepository orderSellerViewRepository;
     private final IMaterializedViewService materializedViewService;
+    private final IAuditLogRepository auditLogRepository;
     // private final SellerConfig config;
     private final Logger logger = LoggerFactory.getLogger(SellerServiceCore.class);
 
     public SellerServiceCore(ISellerRepository sellerRepository,
             IOrderEntryRepository orderEntryRepository,
             IOrderSellerViewRepository orderSellerViewRepository,
-            IMaterializedViewService materializedViewService) {
+            IMaterializedViewService materializedViewService,
+            IAuditLogRepository auditLogRepository) {
         // SellerConfig config
         this.sellerRepository = sellerRepository;
         this.orderEntryRepository = orderEntryRepository;
         this.orderSellerViewRepository = orderSellerViewRepository;
         this.materializedViewService = materializedViewService;
+        this.auditLogRepository = auditLogRepository;
         // this.config = config;
     }
 
@@ -112,6 +120,11 @@ public class SellerServiceCore implements ISellerService {
 
         List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(
                 shipmentNotification.getCustomerId(), shipmentNotification.getOrderId());
+        if (entries.isEmpty()) {
+            throw new PredecessorNotReadyException("No order entries for "
+                    + shipmentNotification.getCustomerId() + "-" + shipmentNotification.getOrderId()
+                    + " yet (InvoiceIssued not processed)");
+        }
 
         for (OrderEntry entry : entries) {
             if (shipmentNotification.getStatus() == ShipmentStatus.APPROVED) {
@@ -127,6 +140,13 @@ public class SellerServiceCore implements ISellerService {
         }
         orderEntryRepository.saveAll(entries);
         logger.info("Order entries saved successfully for Order ID: {}", shipmentNotification.getOrderId());
+
+        if (shipmentNotification.getStatus() == ShipmentStatus.CONCLUDED) {
+            auditLogRepository.append(new AuditRecord("seller", "SHIPMENT_CONCLUDED",
+                    shipmentNotification.getCustomerId(), shipmentNotification.getOrderId())
+                    .with("orderEntries", orderEntryRepository.findByCustomerIdAndOrderId(
+                            shipmentNotification.getCustomerId(), shipmentNotification.getOrderId())));
+        }
     }
 
     /**
@@ -143,10 +163,10 @@ public class SellerServiceCore implements ISellerService {
                 deliveryNotification.getSellerId(),
                 deliveryNotification.getProductId()));
 
-        OrderEntry orderEntry = optionalOrderEntry.orElseThrow(() -> new RuntimeException(
-                "[ProcessDeliveryNotification] Cannot find order entry for order id "
-                        + deliveryNotification.getOrderId() + " and product id "
-                        + deliveryNotification.getProductId()));
+        OrderEntry orderEntry = optionalOrderEntry.orElseThrow(() -> new PredecessorNotReadyException(
+                "[ProcessDeliveryNotification] No order entry for order id "
+                        + deliveryNotification.getOrderId() + " product id "
+                        + deliveryNotification.getProductId() + " yet (InvoiceIssued not processed)"));
 
         orderEntry.setPackageId(deliveryNotification.getPackageId());
         orderEntry.setDeliveryDate(deliveryNotification.getDeliveryDate());
@@ -164,9 +184,14 @@ public class SellerServiceCore implements ISellerService {
      */
     @Override
     public void processPaymentConfirmed(PaymentConfirmed paymentConfirmed) {
-        List<OrderEntry> entries = sellerRepository.findByCustomerIdAndOrderId(
+        List<OrderEntry> entries = orderEntryRepository.findByCustomerIdAndOrderId(
                 paymentConfirmed.getCustomer().getCustomerId(),
                 paymentConfirmed.getOrderId());
+        if (entries.isEmpty()) {
+            throw new PredecessorNotReadyException("No order entries for "
+                    + paymentConfirmed.getCustomer().getCustomerId() + "-" + paymentConfirmed.getOrderId()
+                    + " yet (InvoiceIssued not processed)");
+        }
         for (OrderEntry entry : entries) {
             entry.setOrderStatus(OrderStatus.PAYMENT_PROCESSED);
         }
@@ -187,8 +212,9 @@ public class SellerServiceCore implements ISellerService {
                 paymentFailed.getCustomer().getCustomerId(),
                 paymentFailed.getOrderId());
         if (entries.isEmpty()) {
-            logger.warn("No entries found for customerId: {}, orderId: {}",
-                    paymentFailed.getCustomer().getCustomerId(), paymentFailed.getOrderId());
+            throw new PredecessorNotReadyException("No order entries for "
+                    + paymentFailed.getCustomer().getCustomerId() + "-" + paymentFailed.getOrderId()
+                    + " yet (InvoiceIssued not processed)");
         }
         for (OrderEntry entry : entries) {
             entry.setOrderStatus(OrderStatus.PAYMENT_FAILED);
@@ -197,17 +223,24 @@ public class SellerServiceCore implements ISellerService {
         logger.info("PaymentFailed processing completed.");
     }
 
+    private static final Set<OrderStatus> ONGOING_STATUSES = Set.of(
+            OrderStatus.INVOICED,
+            OrderStatus.PAYMENT_PROCESSED,
+            OrderStatus.READY_FOR_SHIPMENT,
+            OrderStatus.IN_TRANSIT);
+
     /**
-     * Queries an aggregated dashboard view for a seller, including both
-     * high-level summary data and detailed order entries.
+     * Queries the seller dashboard: the discriminated list of order entries plus the
+     * aggregate over the seller's ongoing orders.
+     * <p>
+     * Both halves are computed from a single read of {@code order_entry}, so they always
+     * reflect the same snapshot of the application state.
      */
     @Override
     public SellerDashboard queryDashboard(int sellerId) {
         try {
-            OrderSellerView sellerView = materializedViewService.getSellerView(sellerId);
-            logger.info("dashboard seller view: {}", sellerView);
             List<OrderEntry> orderEntries = orderEntryRepository.findAllBySellerId(sellerId);
-            logger.info("dashboard order entries: {}", orderEntries);
+            OrderSellerView sellerView = aggregateOngoing(sellerId, orderEntries);
             return new SellerDashboard(sellerView, orderEntries);
         } catch (Exception e) {
             logger.error("Error querying dashboard for sellerId {}: {}", sellerId, e.getMessage(), e);
@@ -215,14 +248,44 @@ public class SellerServiceCore implements ISellerService {
         }
     }
 
+    /**
+     * Folds the seller's <em>ongoing</em> order entries (not concluded, not payment-failed)
+     * into the aggregate the dashboard exposes.
+     * <p>
+     * Note: {@code totalItems} / {@code totalIncentive} are summed as stored on the entry;
+     * {@code processInvoiceIssued} does not currently populate them, so they stay 0 until
+     * that is addressed.
+     */
+    private OrderSellerView aggregateOngoing(int sellerId, List<OrderEntry> entries) {
+        OrderSellerView view = new OrderSellerView();
+        view.setSellerId(sellerId);
+        Set<Integer> orderIds = new HashSet<>();
+        for (OrderEntry e : entries) {
+            if (!ONGOING_STATUSES.contains(e.getOrderStatus())) {
+                continue;
+            }
+            orderIds.add(e.getOrderId());
+            view.setCountItems(view.getCountItems() + e.getQuantity());
+            view.setTotalAmount(view.getTotalAmount() + e.getTotalAmount());
+            view.setTotalFreight(view.getTotalFreight() + e.getFreightValue());
+            view.setTotalInvoice(view.getTotalInvoice() + e.getTotalInvoice());
+            view.setTotalItems(view.getTotalItems() + e.getTotalItems());
+            view.setTotalIncentive(view.getTotalIncentive() + e.getTotalIncentive());
+        }
+        view.setCountOrders(orderIds.size());
+        return view;
+    }
+
     @Override
     public void cleanup() {
         sellerRepository.deleteAll();
         orderEntryRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 
     @Override
     public void reset() {
         orderEntryRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 }

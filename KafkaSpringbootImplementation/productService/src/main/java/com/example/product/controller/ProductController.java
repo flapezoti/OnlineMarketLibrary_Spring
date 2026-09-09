@@ -124,6 +124,19 @@ public ResponseEntity<Void> addProduct(@RequestBody com.example.common.entities.
         return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
 
+    @DeleteMapping("/{sellerId}/{productId}")
+    public ResponseEntity<Void> deleteProduct(@PathVariable int sellerId, @PathVariable int productId,
+            @RequestParam(required = false) String instanceId) {
+        logger.info("[DeleteProduct] seller={}, product={}", sellerId, productId);
+        try {
+            productService.processDeleteProduct(sellerId, productId, instanceId);
+            return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+        } catch (Exception e) {
+            logger.error("Failed to delete product {}-{}: {}", sellerId, productId, e.toString());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @PatchMapping("/cleanup")
     public ResponseEntity<Void> cleanup() {
         logger.warn("Cleanup requested at {}", System.currentTimeMillis());

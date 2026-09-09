@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 
 import com.example.payment.repository.IPaymentRepository;
 import com.example.payment.repository.IOrderPaymentCardRepository;
+import com.example.payment.repository.RedisPaymentAuditLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,11 +20,13 @@ public class PaymentServiceConfig {
     public IPaymentService paymentService(
             IPaymentRepository paymentRepository,
             IOrderPaymentCardRepository cardRepository,
+            RedisPaymentAuditLogRepository auditLogRepository,
             IEventPublisher eventPublisher,
             IPaymentConfig config,
             IExternalProvider externalProvider
     ) {
-        return new PaymentServiceCore(paymentRepository, cardRepository, eventPublisher, config, externalProvider);
+        return new PaymentServiceCore(paymentRepository, cardRepository, auditLogRepository, eventPublisher,
+                config, externalProvider);
     }
 
     @Bean

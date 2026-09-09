@@ -40,6 +40,9 @@ package com.example.shipment;// package com.example.shipment;
      private IPackageRepository packageRepository;
 
      @Autowired
+     private com.example.shipment.repository.RedisShipmentAuditLogRepository auditLogRepository;
+
+     @Autowired
      private KafkaTemplate<String, String> kafkaTemplate;
 
      @Autowired
@@ -49,6 +52,7 @@ package com.example.shipment;// package com.example.shipment;
      public void setup() {
          shipmentRepository.deleteAll();
          packageRepository.deleteAll();
+         auditLogRepository.deleteAll();
      }
 
      @Test
@@ -173,6 +177,12 @@ package com.example.shipment;// package com.example.shipment;
          for (Package pkg : updatedPackages) {
              assertThat(pkg.getStatus()).isEqualTo(PackageStatus.DELIVERED);
          }
+
+         // a concluded shipment is written to the durable audit trail
+         List<com.example.common.audit.AuditRecord> records = auditLogRepository.findByOrder(1, 1001);
+         assertThat(records).hasSize(1);
+         assertThat(records.get(0).getTrigger()).isEqualTo("SHIPMENT_CONCLUDED");
+         assertThat(records.get(0).getPayload()).containsKeys("shipment", "packages");
      }
 
  }

@@ -5,6 +5,7 @@ import com.example.cart.repository.*;
 import com.example.common.driver.*;
 import com.example.common.entities.CartStatus;
 import com.example.common.events.*;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
 import com.example.common.requests.CustomerCheckout;
 
@@ -32,6 +33,9 @@ public class CartServiceCore implements ICartService {
     private final IEventPublisher eventPublisher;
 
     private static final Logger logger = LoggerFactory.getLogger(CartServiceCore.class);
+
+    /** Tolerance for comparing float prices when reconciling a cart item against its replica. */
+    private static final float PRICE_EPSILON = 0.001f;
 
     public CartServiceCore(ICartRepository cartRepository,
             ICartItemRepository cartItemRepository,
@@ -114,6 +118,29 @@ public class CartServiceCore implements ICartService {
             throw new RuntimeException("Cart has no items: " + customerCheckout.getCustomerId());
         }
 
+        // Reconcile each cart item against the product replica before the cart is sealed.
+        // A missing replica means the price cannot be verified, so the checkout is refused and
+        // the cart stays OPEN for a retry. When the replica price differs, adopt it; a price
+        // drop is added to the item's discount.
+        for (CartItem item : items) {
+            ProductReplica replica = productReplicaRepository.findByProductReplicaId(
+                    new ProductReplicaId(item.getSellerId(), item.getProductId()));
+            if (replica == null) {
+                throw new RuntimeException("No product replica for " + item.getSellerId() + "-"
+                        + item.getProductId() + "; cannot verify checkout price for customer "
+                        + customerCheckout.getCustomerId());
+            }
+            float oldPrice = item.getUnitPrice();
+            float newPrice = replica.getPrice();
+            if (Math.abs(newPrice - oldPrice) > PRICE_EPSILON) {
+                item.setUnitPrice(newPrice);
+                if (oldPrice - newPrice > 0f) {
+                    item.setVoucher(item.getVoucher() + (oldPrice - newPrice));
+                }
+            }
+        }
+        cartItemRepository.saveAll(items);
+
         cart.setStatus(CartStatus.CHECKOUT_SENT);
         cartRepository.saveCart(cart);
 
@@ -135,7 +162,8 @@ public class CartServiceCore implements ICartService {
         LocalDateTime timestamp = LocalDateTime.now();
         ReserveStock checkout = new ReserveStock(timestamp, customerCheckout, cartItems,
                 customerCheckout.getInstanceId());
-        eventPublisher.publishEvent("reserve-stock-topic", checkout);
+        eventPublisher.publishEvent("reserve-stock-topic",
+                EventKeys.customer(customerCheckout.getCustomerId()), checkout);
     }
 
     /**
@@ -160,14 +188,17 @@ public class CartServiceCore implements ICartService {
                 new ProductReplicaId(productUpdated.getSellerId(), productUpdated.getProductId()));
 
         if (existingProduct == null) {
-            logger.info("existing product is null");
             existingProduct = new ProductReplica();
             existingProduct.setSellerId(productUpdated.getSellerId());
             existingProduct.setProductId(productUpdated.getProductId());
             existingProduct.setCreatedAt(LocalDateTime.now());
+        } else if (!isNewerVersion(productUpdated.getVersion(), existingProduct.getVersion())) {
+            logger.warn("Stale/duplicate product update for {}-{} (incoming v{}, replica v{}); skipping",
+                    productUpdated.getSellerId(), productUpdated.getProductId(),
+                    productUpdated.getVersion(), existingProduct.getVersion());
+            return;
         }
 
-        logger.info("existing product is not null with seller id is {}", existingProduct.getSellerId());
         existingProduct.setName(productUpdated.getName());
         existingProduct.setPrice(productUpdated.getPrice());
         existingProduct.setVersion(productUpdated.getVersion());
@@ -204,7 +235,18 @@ public class CartServiceCore implements ICartService {
             return;
         }
 
+        if (!isNewerVersion(priceUpdate.getVersion(), product.getVersion())) {
+            logger.warn("Stale/duplicate PriceUpdate for {}-{} (incoming v{}, replica v{}); skipping writes",
+                    priceUpdate.getSellerId(), priceUpdate.getProductId(),
+                    priceUpdate.getVersion(), product.getVersion());
+            eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", null, new TransactionMark(
+                    priceUpdate.getInstanceId(), TransactionType.PRICE_UPDATE,
+                    priceUpdate.getSellerId(), MarkStatus.SUCCESS, "cart"));
+            return;
+        }
+
         product.setPrice(priceUpdate.getPrice());
+        product.setVersion(priceUpdate.getVersion());
         productReplicaRepository.saveProductReplica(product);
 
         List<CartItem> cartItems = cartItemRepository.findBySellerIdAndProductId(
@@ -224,7 +266,25 @@ public class CartServiceCore implements ICartService {
                 MarkStatus.SUCCESS,
                 "cart");
 
-        eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", null, transactionMark);
+    }
+
+    /**
+     * True if {@code incoming} is a strictly newer product version than {@code current}.
+     * A null/blank current version means the replica has none yet, so anything is newer.
+     * Versions that do not parse as integers are treated as not-newer (update skipped).
+     */
+    private static boolean isNewerVersion(String incoming, String current) {
+        if (current == null || current.isBlank()) {
+            return true;
+        }
+        try {
+            return Long.parseLong(incoming.trim()) > Long.parseLong(current.trim());
+        } catch (NumberFormatException | NullPointerException e) {
+            logger.warn("Unparseable product version(s): incoming='{}', current='{}'; skipping update",
+                    incoming, current);
+            return false;
+        }
     }
 
     /**
@@ -262,7 +322,7 @@ public class CartServiceCore implements ICartService {
                     "cart");
         }
 
-        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_UPDATE_PRODUCT", null, transactionMark);
     }
 
     /**
@@ -291,7 +351,7 @@ public class CartServiceCore implements ICartService {
                     "cart");
         }
         // asyn
-        CompletableFuture.runAsync(() -> eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", transactionMark));
+        CompletableFuture.runAsync(() -> eventPublisher.publishEvent("TransactionMark_PRICE_UPDATE", null, transactionMark));
     }
 
     /**
@@ -320,6 +380,6 @@ public class CartServiceCore implements ICartService {
                     "cart");
         }
 
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 }

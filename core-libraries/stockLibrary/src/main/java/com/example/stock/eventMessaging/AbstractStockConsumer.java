@@ -1,5 +1,6 @@
 package com.example.stock.eventMessaging;
 
+import com.example.common.events.ProductDelete;
 import com.example.common.events.ProductUpdated;
 import com.example.common.events.ReserveStock;
 import com.example.common.events.PaymentConfirmed;
@@ -42,6 +43,8 @@ public abstract class AbstractStockConsumer {
     /** Need to be implemented */
     protected abstract ProductUpdated deserializeProductUpdated(String payload);
 
+    protected abstract ProductDelete deserializeProductDelete(String payload);
+
     protected abstract ReserveStock deserializeReserveStock(String payload);
 
     protected abstract PaymentConfirmed deserializePaymentConfirmed(String payload);
@@ -65,6 +68,19 @@ public abstract class AbstractStockConsumer {
             ProductUpdated event = deserializeProductUpdated(payload);
             logger.error("Error processing product update: {}", e.getMessage());
             stockService.processPoisonProductUpdate(event);
+        }
+    }
+
+    /**
+     * Handles a ProductDelete event by disabling the corresponding stock item.
+     */
+    public void handleProductDelete(String payload) {
+        try {
+            ProductDelete event = deserializeProductDelete(payload);
+            logger.info("Handling product delete event.");
+            stockService.processProductDelete(event);
+        } catch (Exception e) {
+            logger.error("Error processing product delete: {}", e.getMessage());
         }
     }
 

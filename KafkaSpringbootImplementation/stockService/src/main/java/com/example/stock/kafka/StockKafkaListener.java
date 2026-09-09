@@ -17,6 +17,11 @@ public class StockKafkaListener {
         jsonStockConsumer.handleProductUpdate(message);
     }
 
+    @KafkaListener(topics = "product-delete-topic", groupId = "stock-group")
+    public void listenProductDelete(String message) {
+        jsonStockConsumer.handleProductDelete(message);
+    }
+
     @KafkaListener(topics = "reserve-stock-topic", groupId = "stock-group")
     public void listenReserveStock(String message) {
         jsonStockConsumer.handleReserveStock(message);

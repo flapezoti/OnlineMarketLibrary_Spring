@@ -11,6 +11,9 @@ import com.example.common.events.PaymentFailed;
 import com.example.common.integration.PaymentIntent;
 import com.example.common.integration.PaymentIntentCreateOptions;
 import com.example.common.integration.PaymentStatus;
+import com.example.common.audit.AuditRecord;
+import com.example.common.audit.IAuditLogRepository;
+import com.example.common.messaging.EventKeys;
 import com.example.common.messaging.IEventPublisher;
 import com.example.payment.config.IPaymentConfig;
 import com.example.payment.model.OrderPayment;
@@ -76,6 +79,7 @@ public class PaymentServiceCore implements IPaymentService {
 
     private final IPaymentRepository paymentRepository;
     private final IOrderPaymentCardRepository orderPaymentCardRepository;
+    private final IAuditLogRepository auditLogRepository;
     private final IEventPublisher eventPublisher;
     private final IPaymentConfig config;
     private final IExternalProvider externalProvider;
@@ -95,11 +99,13 @@ public class PaymentServiceCore implements IPaymentService {
      */
     public PaymentServiceCore(IPaymentRepository paymentRepository,
             IOrderPaymentCardRepository orderPaymentCardRepository,
+            IAuditLogRepository auditLogRepository,
             IEventPublisher eventPublisher,
             IPaymentConfig config,
             IExternalProvider externalProvider) {
         this.paymentRepository = paymentRepository;
         this.orderPaymentCardRepository = orderPaymentCardRepository;
+        this.auditLogRepository = auditLogRepository;
         this.eventPublisher = eventPublisher;
         this.config = config;
         this.externalProvider = externalProvider;
@@ -168,6 +174,7 @@ public class PaymentServiceCore implements IPaymentService {
 
             LocalDateTime now = LocalDateTime.now();
             int seq = 1;
+            List<OrderPaymentCard> cards = new ArrayList<>();
             boolean isCreditCard = PaymentType.CREDIT_CARD.name().equals(invoiceIssued.getCustomer().getPaymentType());
             logger.info("Payment type: {}", invoiceIssued.getCustomer().getPaymentType());
 
@@ -200,6 +207,7 @@ public class PaymentServiceCore implements IPaymentService {
                 card.setCardBrand(invoiceIssued.getCustomer().getCardBrand());
                 card.setOrderPayment(entity);
                 orderPaymentCardRepository.save(card);
+                cards.add(card);
                 seq++;
             }
 
@@ -244,6 +252,14 @@ public class PaymentServiceCore implements IPaymentService {
                 paymentRepository.saveAll(paymentLines);
             }
 
+            // Durable audit of the payment, regardless of outcome.
+            auditLogRepository.append(new AuditRecord("payment", "PAYMENT_PROCESSED",
+                    invoiceIssued.getCustomer().getCustomerId(), invoiceIssued.getOrderId())
+                    .with("outcome", status.name())
+                    .with("payments", paymentRepository.findAllByCustomerIdAndOrderId(
+                            invoiceIssued.getCustomer().getCustomerId(), invoiceIssued.getOrderId()))
+                    .with("paymentCards", cards));
+
             if (config.isStreaming()) {
                 if (status == PaymentStatus.SUCCEEDED) {
                     PaymentConfirmed paymentConfirmed = new PaymentConfirmed(
@@ -253,7 +269,9 @@ public class PaymentServiceCore implements IPaymentService {
                             invoiceIssued.getItems(),
                             now,
                             invoiceIssued.getInstanceId());
-                    eventPublisher.publishEvent("payment-confirmed-topic", paymentConfirmed);
+                    eventPublisher.publishEvent("payment-confirmed-topic",
+                            EventKeys.order(invoiceIssued.getCustomer().getCustomerId(), invoiceIssued.getOrderId()),
+                            paymentConfirmed);
                 } else {
                     PaymentFailed paymentFailed = new PaymentFailed(
                             status.name(),
@@ -262,14 +280,16 @@ public class PaymentServiceCore implements IPaymentService {
                             invoiceIssued.getItems(),
                             invoiceIssued.getTotalInvoice(),
                             invoiceIssued.getInstanceId());
-                    eventPublisher.publishEvent("payment-failed-topic", paymentFailed);
+                    eventPublisher.publishEvent("payment-failed-topic",
+                            EventKeys.order(invoiceIssued.getCustomer().getCustomerId(), invoiceIssued.getOrderId()),
+                            paymentFailed);
                     TransactionMark transactionMark = new TransactionMark(
                             invoiceIssued.getInstanceId(),
                             TransactionType.CUSTOMER_SESSION,
                             invoiceIssued.getCustomer().getCustomerId(),
                             MarkStatus.NOT_ACCEPTED,
                             "payment");
-                    eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+                    eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
                 }
             }
 
@@ -288,12 +308,13 @@ public class PaymentServiceCore implements IPaymentService {
                 invoiceIssued.getCustomer().getCustomerId(),
                 MarkStatus.ABORT,
                 "payment");
-        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", transactionMark);
+        eventPublisher.publishEvent("TransactionMark_CUSTOMER_SESSION", null, transactionMark);
     }
 
     @Override
     public void cleanup() {
         orderPaymentCardRepository.deleteAll();
         paymentRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 }

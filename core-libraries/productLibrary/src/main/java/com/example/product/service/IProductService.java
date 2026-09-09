@@ -46,6 +46,8 @@ public interface IProductService {
 
     void processProductUpdate(Product product);
 
+    void processDeleteProduct(int sellerId, int productId, String instanceId);
+
     void processPoisonProductUpdate(Product product);
 
     void processPriceUpdate(PriceUpdate priceUpdate);

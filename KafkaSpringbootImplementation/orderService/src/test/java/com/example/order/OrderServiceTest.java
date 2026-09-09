@@ -13,6 +13,7 @@ import com.example.order.model.OrderId;
 import com.example.order.repository.RedisCustomerOrderRepository;
 import com.example.order.repository.RedisOrderHistoryRepository;
 import com.example.order.repository.RedisOrderRepository;
+import com.example.order.repository.RedisProcessedCheckoutRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -39,11 +40,21 @@ public class OrderServiceTest {
     private KafkaTemplate<String, String> kafkaTemplate;
 
     @Autowired
+    private com.example.order.kafka.OrderKafkaProducer orderKafkaProducer;
+
+    @Autowired
+    private com.example.order.service.IOrderService orderService;
+
+    @Autowired
     private RedisOrderRepository orderRepository;
     @Autowired
     private RedisOrderHistoryRepository orderHOrderRepository;
     @Autowired
     private RedisCustomerOrderRepository customerOrderRepository;
+    @Autowired
+    private RedisProcessedCheckoutRepository processedCheckoutRepository;
+    @Autowired
+    private com.example.order.repository.RedisOrderAuditLogRepository auditLogRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -53,6 +64,8 @@ public class OrderServiceTest {
         orderRepository.deleteAll();
         orderHOrderRepository.deleteAll();
         customerOrderRepository.deleteAll();
+        processedCheckoutRepository.deleteAll();
+        auditLogRepository.deleteAll();
     }
 
     @Test
@@ -103,9 +116,7 @@ public class OrderServiceTest {
         items.add(item2);
         stockConfirmed.setItems(items);
 
-        String payload = objectMapper.writeValueAsString(stockConfirmed);
-        kafkaTemplate.send("stock-confirmed-topic", payload);
-        TimeUnit.MILLISECONDS.sleep(200);
+        orderService.processStockConfirmed(stockConfirmed).join();
 
         Order updatedOrder = orderRepository.findByCustomerIdAndOrderId(1001, 1).orElse(null);
 
@@ -140,9 +151,7 @@ public class OrderServiceTest {
         paymentConfirmed.setOrderId(1);
         paymentConfirmed.setDate(LocalDateTime.now());
 
-        String payload = objectMapper.writeValueAsString(paymentConfirmed);
-        kafkaTemplate.send("payment-confirmed-topic", payload);
-        TimeUnit.MILLISECONDS.sleep(200);
+        orderService.processPaymentConfirmed(paymentConfirmed);
 
         Order updatedOrder = orderRepository.findByCustomerIdAndOrderId(1001, 1).orElse(null);
         assertNotNull(updatedOrder);
@@ -177,9 +186,7 @@ public class OrderServiceTest {
         paymentFailed.setCustomer(customerCheckout);
         paymentFailed.setOrderId(1);
 
-        String payload = objectMapper.writeValueAsString(paymentFailed);
-        kafkaTemplate.send("payment-failed-topic", payload);
-        TimeUnit.MILLISECONDS.sleep(200);
+        orderService.processPaymentFailed(paymentFailed);
 
         Order updateOrder = orderRepository.findByCustomerIdAndOrderId(1001, 1).orElse(null);
         assertNotNull(updateOrder);
@@ -214,13 +221,155 @@ public class OrderServiceTest {
         shipmentNotification.setStatus(ShipmentStatus.CONCLUDED);
         shipmentNotification.setEventDate(LocalDateTime.now());
 
-        String payload = objectMapper.writeValueAsString(shipmentNotification);
-        kafkaTemplate.send("shipment-notification-topic", payload);
-
-        TimeUnit.MILLISECONDS.sleep(200);
+        orderService.processShipmentNotification(shipmentNotification);
 
         Order updatedOrder = orderRepository.findByCustomerIdAndOrderId(1001, 1).orElse(null);
         assertNotNull(updatedOrder, "Order should exist in the database");
         assertEquals(OrderStatus.DELIVERED, updatedOrder.getStatus(), "Order status should be updated to DELIVERED");
+    }
+
+    // ---- out-of-order arrival: order not created yet -> retryable signal ---------------
+
+    @Test
+    public void testPaymentConfirmedBeforeOrderThrows() {
+        CustomerCheckout cc = new CustomerCheckout();
+        cc.setCustomerId(7777);
+        PaymentConfirmed pc = new PaymentConfirmed();
+        pc.setCustomer(cc);
+        pc.setOrderId(1);
+        assertThrows(com.example.common.messaging.PredecessorNotReadyException.class,
+                () -> orderService.processPaymentConfirmed(pc));
+    }
+
+    // ---- idempotent consumers (at-least-once delivery) --------------------------------
+
+    @Test
+    public void testPaymentConfirmedIsIdempotent() {
+        Order order = new Order();
+        order.setId(new OrderId(1001, 1));
+        order.setStatus(OrderStatus.CREATED);
+        order.setInvoiceNumber("INV-IDEM-1");
+        order.setPurchaseDate(LocalDateTime.now());
+        order.setCreatedAt(LocalDateTime.now());
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+
+        CustomerCheckout cc = new CustomerCheckout();
+        cc.setCustomerId(1001);
+        PaymentConfirmed pc = new PaymentConfirmed();
+        pc.setCustomer(cc);
+        pc.setOrderId(1);
+        pc.setDate(LocalDateTime.now());
+
+        orderService.processPaymentConfirmed(pc);
+        orderService.processPaymentConfirmed(pc); // redelivery
+
+        assertEquals(1, orderRepository.findByCustomerId(1001).size());
+        assertEquals(OrderStatus.PAYMENT_PROCESSED,
+                orderRepository.findByCustomerIdAndOrderId(1001, 1).orElseThrow().getStatus());
+        long paymentProcessedRows = orderHOrderRepository.findByCustomerIdAndOrderId(1001, 1).stream()
+                .filter(h -> h.getStatus() == OrderStatus.PAYMENT_PROCESSED)
+                .count();
+        assertEquals(1, paymentProcessedRows);
+    }
+
+    // ---- audit logging ----------------------------------------------------------------
+
+    @Test
+    public void testPaymentFailedIsAuditLogged() {
+        Order order = new Order();
+        order.setId(new OrderId(1001, 1));
+        order.setStatus(OrderStatus.CREATED);
+        order.setInvoiceNumber("INV-AUDIT-1");
+        order.setPurchaseDate(LocalDateTime.now());
+        order.setCreatedAt(LocalDateTime.now());
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+
+        CustomerCheckout cc = new CustomerCheckout();
+        cc.setCustomerId(1001);
+        PaymentFailed pf = new PaymentFailed();
+        pf.setCustomer(cc);
+        pf.setOrderId(1);
+
+        orderService.processPaymentFailed(pf);
+
+        List<com.example.common.audit.AuditRecord> records = auditLogRepository.findByOrder(1001, 1);
+        assertEquals(1, records.size());
+        assertEquals("PAYMENT_FAILED", records.get(0).getTrigger());
+        assertTrue(records.get(0).getPayload().containsKey("order"));
+        assertTrue(records.get(0).getPayload().containsKey("orderItems"));
+        assertTrue(records.get(0).getPayload().containsKey("orderHistory"));
+    }
+
+    // ---- no duplicate checkouts ---------------------------------------------------------
+
+    @Test
+    public void testDuplicateStockConfirmedCreatesOneOrder() throws Exception {
+        int customerId = 9001;
+        String payload = objectMapper.writeValueAsString(buildStockConfirmed(customerId, "dup-instance-1"));
+
+        kafkaTemplate.send("stock-confirmed-topic", payload);
+        TimeUnit.MILLISECONDS.sleep(300);
+        kafkaTemplate.send("stock-confirmed-topic", payload); // redelivery of the same checkout
+        TimeUnit.MILLISECONDS.sleep(300);
+
+        List<Order> orders = orderRepository.findByCustomerId(customerId);
+        assertEquals(1, orders.size(), "a redelivered StockConfirmed must not create a second order");
+        assertEquals(1, customerOrderRepository.findByCustomerId(customerId).getNextOrderId(),
+                "nextOrderId must not be incremented twice for one checkout");
+    }
+
+    @Test
+    public void testStockConfirmedWithNoInstanceIdIsNotDeduped() throws Exception {
+        int customerId = 9002;
+        String payload = objectMapper.writeValueAsString(buildStockConfirmed(customerId, null));
+
+        kafkaTemplate.send("stock-confirmed-topic", payload);
+        TimeUnit.MILLISECONDS.sleep(300);
+        kafkaTemplate.send("stock-confirmed-topic", payload);
+        TimeUnit.MILLISECONDS.sleep(300);
+
+        // With no instanceId there is nothing to key the guard on, so both events are processed.
+        assertEquals(2, orderRepository.findByCustomerId(customerId).size(),
+                "without an instanceId the duplicate guard does not apply");
+    }
+
+    @Test
+    public void testProducerPublishRoundTrips() throws Exception {
+        // The real producer path (publishEvent) must emit a bare JSON object the
+        // consumer can deserialize, not a 1-element array.
+        int customerId = 9003;
+        orderKafkaProducer.publishEvent("stock-confirmed-topic",
+                com.example.common.messaging.EventKeys.customer(customerId),
+                buildStockConfirmed(customerId, "roundtrip-1"));
+        TimeUnit.MILLISECONDS.sleep(400);
+
+        assertEquals(1, orderRepository.findByCustomerId(customerId).size(),
+                "an event published via the real producer must deserialize and create an order");
+    }
+
+    private StockConfirmed buildStockConfirmed(int customerId, String instanceId) {
+        CustomerCheckout checkout = new CustomerCheckout();
+        checkout.setCustomerId(customerId);
+        checkout.setInstanceId(instanceId);
+
+        CartItem item = new CartItem();
+        item.setProductId(2001);
+        item.setSellerId(3001);
+        item.setQuantity(2);
+        item.setUnitPrice(50.0f);
+        item.setFreightValue(5.0f);
+        item.setVoucher(0.0f);
+
+        List<CartItem> items = new ArrayList<>();
+        items.add(item);
+
+        StockConfirmed sc = new StockConfirmed();
+        sc.setTimestamp(LocalDateTime.now());
+        sc.setCustomerCheckout(checkout);
+        sc.setItems(items);
+        sc.setInstanceId(instanceId);
+        return sc;
     }
 }
